@@ -6,9 +6,10 @@ import {
   fetchListingById,
   getListingImageUrls,
   fetchUser251Listings,
+  sendMotorEnquiry,
 } from "@/services/backendApi";
-import { DetailedListing, Vehicle } from "@/types";
-import { isFavourite, toggleFavourite } from "@/utils/favourites";
+import { DetailedListing, Vehicle, ListingContact } from "@/types";
+import { isFavourite, toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
 export default function ListingDetailPage({
@@ -20,6 +21,8 @@ export default function ListingDetailPage({
   const listingId = resolvedParams.id;
 
   const [listing, setListing] = useState<DetailedListing | null>(null);
+  const [userListings, setUserListings] = useState<Vehicle[]>([]);
+  const [totalUserListings, setTotalUserListings] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
   const [isSaved, setIsSaved] = useState<boolean>(false);
@@ -31,6 +34,7 @@ export default function ListingDetailPage({
   // Modals state
   const [activeModal, setActiveModal] = useState<"enquire" | "testdrive" | "question" | "tradein" | null>(null);
   const [modalSubmitted, setModalSubmitted] = useState<boolean>(false);
+  const [isSubmittingEnquiry, setIsSubmittingEnquiry] = useState<boolean>(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -45,19 +49,22 @@ export default function ListingDetailPage({
   // Finance Calculator state
   const [deposit, setDeposit] = useState<number>(200);
   const [loanTermMonths, setLoanTermMonths] = useState<number>(36);
+  const [favIds, setFavIds] = useState<string[]>([]);
 
   const heroRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
-      const data = await fetchListingById(listingId);
-      setListing(data);
-      if (data) {
-        setIsSaved(isFavourite(String(data.id)));
+      const resData = await fetchListingById(listingId);
+      if (resData && resData.listing) {
+        setListing(resData.listing);
+        setUserListings(resData.userListing || []);
+        setTotalUserListings(resData.totalUserListing || 0);
+        setIsSaved(isFavourite(String(resData.listing.id)));
       }
 
-      // Fetch similar listings for recently viewed / recommended section
+      // Fetch fallback recommended listings if seller listings are empty
       const recentRes = await fetchUser251Listings(251, 1, 4);
       setSimilarVehicles(recentRes.listings.filter((v) => String(v.id) !== String(listingId)));
 
@@ -65,6 +72,20 @@ export default function ListingDetailPage({
     }
     loadData();
   }, [listingId]);
+
+  useEffect(() => {
+    const syncFavs = () => {
+      const favs = getFavourites();
+      const ids = favs.map((f: Vehicle) => String(f.id));
+      setFavIds(ids);
+      if (listing) {
+        setIsSaved(ids.includes(String(listing.id)));
+      }
+    };
+    syncFavs();
+    window.addEventListener("favouritesUpdated", syncFavs);
+    return () => window.removeEventListener("favouritesUpdated", syncFavs);
+  }, [listing]);
 
   // Scroll listener for sticky top bar
   useEffect(() => {
@@ -81,6 +102,14 @@ export default function ListingDetailPage({
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleToggleOtherFav = (e: React.MouseEvent, item: Vehicle) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleFavourite(item);
+    const nextState = isFavourite(String(item.id));
+    triggerToast(nextState ? "Saved to your Garage! ❤️" : "Removed from Garage");
   };
 
   const handleToggleFav = () => {
@@ -112,20 +141,70 @@ export default function ListingDetailPage({
     }
   };
 
-  const handleModalSubmit = (e: React.FormEvent) => {
+  const handleModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setModalSubmitted(true);
-    setTimeout(() => {
-      setModalSubmitted(false);
-      setActiveModal(null);
-      setFormData({ name: "", email: "", phone: "", message: "", preferredDate: "" });
-      triggerToast("Thank you! Your request has been sent to the seller.");
-    }, 1500);
+    if (!listing) return;
+    setIsSubmittingEnquiry(true);
+
+    // Collect recipient seller/agent emails
+    const toEmails: string[] = [];
+    if (listing.contacts && listing.contacts.length > 0) {
+      listing.contacts.forEach((c) => {
+        if (c.email) toEmails.push(c.email);
+      });
+    }
+    if (toEmails.length === 0 && listing.user?.email) {
+      toEmails.push(listing.user.email);
+    }
+    if (toEmails.length === 0) {
+      toEmails.push("ashup8998+321@gmail.com");
+    }
+
+    const currentUrl =
+      typeof window !== "undefined"
+        ? window.location.href
+        : `https://primewheels.co.nz/vehicles/${listing.id}`;
+
+    let enquiryMsg = formData.message.trim();
+    if (!enquiryMsg) {
+      enquiryMsg = `Hi, I am interested in ${listing.title} (Ref #${listing.id}). Please contact me.`;
+    }
+    if (activeModal === "testdrive" && formData.preferredDate) {
+      enquiryMsg += `\n\n[Preferred Test Drive Date: ${formData.preferredDate}]`;
+    }
+
+    const result = await sendMotorEnquiry({
+      name: formData.name,
+      phone: formData.phone,
+      email: formData.email,
+      message: enquiryMsg,
+      listingTitle: listing.title,
+      toEmails: toEmails,
+      vehicleUrl: currentUrl,
+      agents: listing.contacts && listing.contacts.length > 0 ? listing.contacts : undefined,
+      listingId: listing.id,
+      preferredDate: formData.preferredDate,
+      type: activeModal || "enquire",
+    });
+
+    setIsSubmittingEnquiry(false);
+
+    if (result.success) {
+      setModalSubmitted(true);
+      setTimeout(() => {
+        setModalSubmitted(false);
+        setActiveModal(null);
+        setFormData({ name: "", email: "", phone: "", message: "", preferredDate: "" });
+        triggerToast(result.message || "Thank you! Your query has been sent to the seller.");
+      }, 1500);
+    } else {
+      triggerToast(result.message || "Failed to submit request to seller.");
+    }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white pt-32 pb-24 px-4 max-w-7xl mx-auto animate-pulse">
+      <div className="min-h-screen bg-black text-white pt-32 pb-24 px-4 max-w-7xl mx-auto animate-pulse font-sans">
         <div className="h-8 w-48 bg-zinc-800 rounded mb-6"></div>
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
           <div className="lg:col-span-2 h-96 bg-zinc-900 rounded-2xl border border-zinc-800"></div>
@@ -138,7 +217,7 @@ export default function ListingDetailPage({
 
   if (!listing) {
     return (
-      <div className="min-h-screen bg-black text-white pt-36 pb-24 px-4 text-center max-w-xl mx-auto">
+      <div className="min-h-screen bg-black text-white pt-36 pb-24 px-4 text-center max-w-xl mx-auto font-sans">
         <div className="w-16 h-16 mx-auto mb-4 bg-zinc-900 rounded-full flex items-center justify-center text-zinc-500">
           🔍
         </div>
@@ -185,10 +264,10 @@ export default function ListingDetailPage({
   // Dealer Business & Finance Details
   const businessDetail = listing.user?.userBusinessDetails?.[0];
   const financeRates = businessDetail?.finance || {
-    annualInterestRate: 10,
-    loanEstablishmentFee: 20,
-    securityFee: 30,
-    monthlyMaintenanceFee: 40,
+    annualInterestRate: 10.95,
+    loanEstablishmentFee: 375,
+    securityFee: 10.35,
+    monthlyMaintenanceFee: 8.23,
   };
 
   // Finance calculation logic
@@ -206,11 +285,19 @@ export default function ListingDetailPage({
       : Math.round(principal / totalWeeks);
   const totalRepayment = Math.round(estimatedWeekly * totalWeeks);
 
-  const primaryContact = listing.contacts?.[0] || {
-    name: `${listing.user?.firstName || ""} ${listing.user?.lastName || ""}`.trim() || "Dealer Contact",
-    phone: listing.contact || listing.user?.phone || "07404506030",
-    email: listing.user?.email || "ashup8998+123@gmail.com",
-  };
+  // Contacts from getListing query
+  const contactsList: ListingContact[] =
+    listing.contacts && listing.contacts.length > 0
+      ? listing.contacts
+      : [
+          {
+            name: `${listing.user?.firstName || ""} ${listing.user?.lastName || ""}`.trim() || "Ashutosh sharma",
+            role: "agent",
+            phone: listing.contact || listing.user?.phone || "+647404506321",
+            email: listing.user?.email || "ashup8998+321@gmail.com",
+            isPrimary: true,
+          },
+        ];
 
   const saleMethodDetails = determineSaleMethod(listing);
 
@@ -220,7 +307,7 @@ export default function ListingDetailPage({
     listing.location?.state,
   ]
     .filter(Boolean)
-    .join(", ") || "Dargaville, Northland";
+    .join(", ") || "Allen Bell Drive, Dargaville, Northland";
 
   return (
     <div className="min-h-screen bg-black text-white font-sans pb-28 pt-24 md:pt-28">
@@ -260,6 +347,19 @@ export default function ListingDetailPage({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleFav}
+              className={`p-2 rounded-lg border transition ${
+                isSaved
+                  ? "bg-red-600 border-red-500 text-white"
+                  : "bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 hover:text-white"
+              }`}
+              title={isSaved ? "Remove from Garage" : "Save to Garage"}
+            >
+              <svg className={`w-4 h-4 ${isSaved ? "fill-current" : "fill-none stroke-current stroke-2"}`} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11h4v10" />
+              </svg>
+            </button>
             <button
               onClick={() => setActiveModal("enquire")}
               className="px-4 py-2 bg-[#C2410C] text-white text-xs font-mono font-bold uppercase rounded-lg hover:bg-[#a33509] transition"
@@ -353,8 +453,8 @@ export default function ListingDetailPage({
             </div>
           </div>
 
-          {/* Side Stacked Thumbnails (Desktop Right Column) */}
-          <div className="grid grid-rows-2 gap-4 h-full">
+          {/* Side Stacked Thumbnails (Desktop Right Column Only) */}
+          <div className="hidden lg:grid grid-rows-2 gap-4 h-full">
             {images.slice(1, 3).map((imgUrl, idx) => (
               <div
                 key={idx}
@@ -687,6 +787,89 @@ export default function ListingDetailPage({
                 </div>
               </div>
             </div>
+
+            {/* OTHER LISTINGS BY THIS SELLER (userListing from GraphQL) */}
+            {userListings.length > 0 && (
+              <div className="mt-12 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 md:p-8 space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+                  <div>
+                    <h2 className="text-xl md:text-2xl font-black font-mono uppercase tracking-tight text-white">
+                      OTHER LISTINGS FROM THIS SELLER
+                    </h2>
+                    <p className="text-xs font-mono text-gray-400 mt-1">
+                      Explore {totalUserListings} vehicles available from this seller
+                    </p>
+                  </div>
+
+                  <Link
+                    href="/vehicles"
+                    className="px-5 py-2.5 bg-[#C2410C] hover:bg-[#a33509] text-white font-mono font-extrabold text-xs uppercase tracking-wider rounded-xl transition shadow-lg flex items-center gap-2"
+                  >
+                    <span>VIEW ALL LISTINGS ({totalUserListings || userListings.length})</span>
+                    <span>&rarr;</span>
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {userListings.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={`/vehicles/${item.id}`}
+                      className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden hover:border-[#C2410C] transition group flex flex-col"
+                    >
+                      <div className="relative aspect-[16/10] bg-zinc-900 overflow-hidden">
+                        <img
+                          src={item.images[0]}
+                          alt={item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <button
+                          onClick={(e) => handleToggleOtherFav(e, item)}
+                          className={`absolute top-2 left-2 w-8 h-8 rounded-full backdrop-blur-md flex items-center justify-center shadow-lg transition transform hover:scale-110 z-10 ${
+                            favIds.includes(String(item.id)) ? "bg-red-600 text-white" : "bg-white/90 text-zinc-900 hover:bg-white"
+                          }`}
+                          title={favIds.includes(String(item.id)) ? "Remove from Garage" : "Save to Garage"}
+                        >
+                          <svg className={`w-3.5 h-3.5 ${favIds.includes(String(item.id)) ? "fill-current" : "fill-none stroke-current stroke-2"}`} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11h4v10" />
+                          </svg>
+                        </button>
+                        <span className="absolute top-2 right-2 bg-black/80 text-white font-mono text-[10px] font-bold px-2 py-0.5 rounded border border-zinc-700">
+                          Ref #{item.id}
+                        </span>
+                      </div>
+
+                      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                        <div>
+                          <h3 className="font-mono font-bold text-sm text-white group-hover:text-[#C2410C] transition-colors line-clamp-1 mb-1">
+                            {item.title}
+                          </h3>
+                          <div className="flex items-center justify-between text-xs font-mono">
+                            <span className="text-[#C2410C] font-bold">
+                              {item.formattedSaleMethod || determineSaleMethod(item).label}
+                            </span>
+                            {item.location && (
+                              <span className="text-gray-500 text-[11px] truncate max-w-[110px]">
+                                {item.location}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-zinc-900">
+                          <span className="font-mono font-black text-sm text-white">
+                            {item.price > 0 ? `$${item.price.toLocaleString("en-NZ")}` : "Price By Negotiation"}
+                          </span>
+                          <span className="text-[10px] font-mono text-gray-400 group-hover:text-[#C2410C] uppercase font-bold">
+                            View Detail &rsaquo;
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* RIGHT COLUMN (35% STICKY SIDEBAR) */}
@@ -743,66 +926,111 @@ export default function ListingDetailPage({
 
               <hr className="border-zinc-800" />
 
-              {/* Quick Action Button Stack */}
-              <div className="space-y-2">
+              {/* Quick Action Button Stack (Matching reference UI: media_1790656353445.png) */}
+              <div className="space-y-3">
+                {/* ASK A QUESTION button */}
                 <button
                   onClick={() => setActiveModal("question")}
-                  className="w-full py-2.5 bg-zinc-950 border border-zinc-800 text-gray-300 font-mono text-xs uppercase font-bold rounded-lg hover:border-zinc-700 hover:text-white transition text-left px-4 flex items-center justify-between"
+                  className="w-full py-3.5 px-5 bg-black border border-zinc-800 rounded-xl text-white font-mono font-extrabold text-xs uppercase tracking-wider hover:border-zinc-600 transition flex items-center justify-between group shadow-md"
                 >
                   <span>ASK A QUESTION</span>
-                  <span>&rsaquo;</span>
+                  <span className="font-mono text-gray-300 text-sm group-hover:translate-x-1 transition-transform">
+                    &rsaquo;
+                  </span>
                 </button>
 
+                {/* BOOK A TEST DRIVE button */}
                 <button
                   onClick={() => setActiveModal("testdrive")}
-                  className="w-full py-2.5 bg-zinc-950 border border-zinc-800 text-gray-300 font-mono text-xs uppercase font-bold rounded-lg hover:border-zinc-700 hover:text-white transition text-left px-4 flex items-center justify-between"
+                  className="w-full py-3.5 px-5 bg-black border border-zinc-800 rounded-xl text-white font-mono font-extrabold text-xs uppercase tracking-wider hover:border-zinc-600 transition flex items-center justify-between group shadow-md"
                 >
                   <span>BOOK A TEST DRIVE</span>
-                  <span>&rsaquo;</span>
+                  <span className="font-mono text-gray-300 text-sm group-hover:translate-x-1 transition-transform">
+                    &rsaquo;
+                  </span>
                 </button>
 
+                {/* TRADE IN ESTIMATE button */}
                 <Link
                   href="/price-my-trade"
-                  className="w-full py-2.5 bg-zinc-950 border border-zinc-800 text-gray-300 font-mono text-xs uppercase font-bold rounded-lg hover:border-zinc-700 hover:text-white transition text-left px-4 flex items-center justify-between block"
+                  className="w-full py-3.5 px-5 bg-black border border-zinc-800 rounded-xl text-white font-mono font-extrabold text-xs uppercase tracking-wider hover:border-zinc-600 transition flex items-center justify-between group shadow-md block"
                 >
                   <span>TRADE IN ESTIMATE</span>
-                  <span>&rsaquo;</span>
+                  <span className="font-mono text-gray-300 text-sm group-hover:translate-x-1 transition-transform">
+                    &rsaquo;
+                  </span>
                 </Link>
 
+                {/* APPLY FOR FINANCE button */}
                 <Link
                   href="/finance"
-                  className="w-full py-2.5 bg-zinc-950 border border-zinc-800 text-gray-300 font-mono text-xs uppercase font-bold rounded-lg hover:border-zinc-700 hover:text-white transition text-left px-4 flex items-center justify-between block"
+                  className="w-full py-3.5 px-5 bg-black border border-zinc-800 rounded-xl text-white font-mono font-extrabold text-xs uppercase tracking-wider hover:border-zinc-600 transition flex items-center justify-between group shadow-md block"
                 >
                   <span>APPLY FOR FINANCE</span>
-                  <span>&rsaquo;</span>
+                  <span className="font-mono text-gray-300 text-sm group-hover:translate-x-1 transition-transform">
+                    &rsaquo;
+                  </span>
                 </Link>
               </div>
 
               <hr className="border-zinc-800" />
 
-              {/* Dealer Location & Contact Info Box */}
+              {/* Seller / Agent Contacts Info Box */}
               <div className="space-y-4">
                 <div className="text-xs font-mono uppercase text-gray-400 tracking-wider">
-                  View This Vehicle At
+                  Contact Seller / Agent
                 </div>
 
-                <div className="bg-zinc-950 rounded-xl p-4 border border-zinc-800 space-y-3">
-                  <div className="font-mono font-bold text-white text-sm">
-                    {locationStr}
-                  </div>
+                <div className="space-y-3">
+                  {contactsList.map((c, idx) => (
+                    <div key={idx} className="bg-zinc-950 rounded-xl p-4 border border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="font-mono font-black text-white text-sm">
+                          {c.name || "Ashutosh sharma"}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {c.role && (
+                            <span className="px-2 py-0.5 bg-[#C2410C]/20 text-[#C2410C] border border-[#C2410C]/40 rounded text-[10px] font-mono font-extrabold uppercase">
+                              {c.role}
+                            </span>
+                          )}
+                          {c.isPrimary && (
+                            <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded text-[10px] font-mono font-extrabold uppercase">
+                              Primary
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                  <div className="text-xs text-gray-400 space-y-1">
-                    <div><strong>Contact:</strong> {primaryContact.name}</div>
-                    <div><strong>Ph:</strong> <a href={`tel:${primaryContact.phone}`} className="text-white hover:underline">{primaryContact.phone}</a></div>
-                    <div><strong>Email:</strong> <a href={`mailto:${primaryContact.email}`} className="text-white hover:underline truncate block">{primaryContact.email}</a></div>
-                  </div>
+                      <div className="text-xs text-gray-400 space-y-1 font-mono">
+                        {c.phone && (
+                          <div>
+                            <span className="text-gray-500">Ph: </span>
+                            <a href={`tel:${c.phone}`} className="text-white hover:text-[#C2410C] transition font-bold">
+                              {c.phone}
+                            </a>
+                          </div>
+                        )}
+                        {c.email && (
+                          <div>
+                            <span className="text-gray-500">Email: </span>
+                            <a href={`mailto:${c.email}`} className="text-white hover:text-[#C2410C] transition font-bold truncate block">
+                              {c.email}
+                            </a>
+                          </div>
+                        )}
+                        {c.preferredContactMethod && (
+                          <div className="text-[10px] text-gray-500 uppercase pt-0.5">
+                            Preferred Method: <span className="text-zinc-300 font-bold">{c.preferredContactMethod}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
 
-                  {/* Dealer Rating Badge */}
-                  <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs">
-                    <span className="text-amber-400 font-bold flex items-center gap-1">
-                      ★★★★★ 4.91
-                    </span>
-                    <span className="text-gray-400 font-mono text-[10px]">2,875 reviews</span>
+                  <div className="bg-zinc-950 rounded-xl p-3 border border-zinc-800 flex items-center justify-between text-xs">
+                    <span className="text-gray-400 font-mono text-[11px]">Location</span>
+                    <span className="font-mono font-bold text-white text-right">{locationStr.split(",")[0]}</span>
                   </div>
                 </div>
               </div>
@@ -812,7 +1040,7 @@ export default function ListingDetailPage({
             {similarVehicles.length > 0 && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
                 <h3 className="text-sm font-mono font-black uppercase text-white mb-4">
-                  SIMILAR VEHICLES
+                  RECOMMENDED VEHICLES
                 </h3>
 
                 <div className="space-y-4">
@@ -891,7 +1119,7 @@ export default function ListingDetailPage({
 
       {/* INTERACTIVE ACTION MODALS (Enquire / Test Drive / Ask Question) */}
       {activeModal && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn font-sans">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 relative">
             <button
               onClick={() => setActiveModal(null)}
@@ -912,8 +1140,8 @@ export default function ListingDetailPage({
             {modalSubmitted ? (
               <div className="py-8 text-center text-emerald-400 font-mono text-sm space-y-2">
                 <div className="text-3xl">✓</div>
-                <div className="font-bold">Message Sent Successfully!</div>
-                <div className="text-xs text-gray-400">The dealer will get back to you shortly.</div>
+                <div className="font-bold">Query Submitted to Seller!</div>
+                <div className="text-xs text-gray-400">The seller will get back to you shortly.</div>
               </div>
             ) : (
               <form onSubmit={handleModalSubmit} className="space-y-4">
@@ -974,15 +1202,16 @@ export default function ListingDetailPage({
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#C2410C]"
-                    placeholder="Hi, I'm interested in this listing..."
+                    placeholder="Hi, I'm interested in this vehicle..."
                   ></textarea>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3 bg-[#C2410C] text-white font-mono font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-[#a33509] transition"
+                  disabled={isSubmittingEnquiry}
+                  className="w-full py-3 bg-[#C2410C] text-white font-mono font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-[#a33509] transition disabled:opacity-50"
                 >
-                  Submit Request
+                  {isSubmittingEnquiry ? "Sending Query..." : "Submit Request"}
                 </button>
               </form>
             )}

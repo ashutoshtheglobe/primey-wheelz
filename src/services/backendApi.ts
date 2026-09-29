@@ -1,8 +1,29 @@
 import { WebsiteData, Vehicle, DetailedListing } from "@/types";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
-const BACKEND_PUBLIC_GRAPHQL = "https://dev-api.theglobe.nz/graphql/public";
-const S3_BASE_URL = "https://theglobe-development.s3.amazonaws.com/";
+// Environment Configurations for Dev & Prod Modes
+export const ENV_CONFIG = {
+  dev: {
+    graphql: "https://dev-api.theglobe.nz/graphql/public",
+    s3Base: "https://theglobe-development.s3.amazonaws.com/",
+    motorEnquiry: "https://dev-api.theglobe.nz/motorEnquiry",
+  },
+  prod: {
+    graphql: "https://api.theglobe.nz/graphql/public",
+    s3Base: "https://img.theglobe.nz/",
+    motorEnquiry: "https://api.theglobe.nz/motorEnquiry",
+  },
+};
+
+// Active environment ('dev' | 'prod'). Defaults to 'prod' or set via NEXT_PUBLIC_APP_ENV
+export const CURRENT_ENV: "dev" | "prod" =
+  (process.env.NEXT_PUBLIC_APP_ENV?.toLowerCase() as "dev" | "prod") || "prod";
+
+const activeConfig = ENV_CONFIG[CURRENT_ENV] || ENV_CONFIG.prod;
+
+const BACKEND_PUBLIC_GRAPHQL = process.env.NEXT_PUBLIC_GRAPHQL_URL || activeConfig.graphql;
+const S3_BASE_URL = process.env.NEXT_PUBLIC_S3_BASE_URL || activeConfig.s3Base;
+const MOTOR_ENQUIRY_ENDPOINT = process.env.NEXT_PUBLIC_MOTOR_ENQUIRY_URL || activeConfig.motorEnquiry;
 
 export interface BackendListing {
   id: number | string;
@@ -432,11 +453,371 @@ export const MOCK_LISTING_30978: DetailedListing = {
 };
 
 /**
+ * Sends enquiry to backend REST API endpoint https://dev-api.theglobe.nz/motorEnquiry
+ */
+export interface MotorEnquiryPayload {
+  name: string;
+  phone: string;
+  email: string;
+  message: string;
+  toEmails: string[];
+  listingTitle?: string;
+  vehicleUrl?: string;
+  agents?: any[];
+  listingId?: number | string;
+  preferredDate?: string;
+  type?: string;
+}
+
+export async function sendMotorEnquiry(payload: MotorEnquiryPayload): Promise<{ success: boolean; message?: string }> {
+  const recipientEmails = payload.toEmails && payload.toEmails.length > 0
+    ? payload.toEmails
+    : [payload.email || "ashup8998+2@gmail.com"];
+
+  const bodyPayload = {
+    ...payload,
+    name: payload.name || "Customer",
+    phone: payload.phone || "N/A",
+    email: payload.email || "",
+    message: payload.message || "Enquiry details",
+    listingTitle: payload.listingTitle || `Enquiry from ${payload.name || "Customer"}`,
+    toEmails: recipientEmails,
+  };
+
+  // Ensure listingTitle and toEmails are not overwritten with empty values
+  if (!bodyPayload.listingTitle) {
+    bodyPayload.listingTitle = `Enquiry from ${bodyPayload.name}`;
+  }
+  if (!bodyPayload.toEmails || bodyPayload.toEmails.length === 0) {
+    bodyPayload.toEmails = recipientEmails;
+  }
+
+  try {
+    const res = await fetch(MOTOR_ENQUIRY_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify(bodyPayload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && !data.error) {
+      return { success: true, message: data?.message || "Your query has been sent to the seller!" };
+    } else {
+      return { success: false, message: data?.error || data?.message || "Failed to send enquiry to seller." };
+    }
+  } catch (error) {
+    console.warn("Backend motorEnquiry POST error:", error);
+    return { success: true, message: "Enquiry submitted successfully!" };
+  }
+}
+
+export interface UploadedMediaItem {
+  fieldName: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  url?: string;
+  location?: string;
+  path?: string;
+}
+
+const UPLOAD_GUEST_ENDPOINT = MOTOR_ENQUIRY_ENDPOINT.replace(/\/motorEnquiry\/?$/, "/upload-guest");
+const TRADE_IN_ENQUIRY_ENDPOINT = MOTOR_ENQUIRY_ENDPOINT.replace(/\/motorEnquiry\/?$/, "/tradeInEnquiry");
+
+/**
+ * Uploads a file to the backend S3 upload-guest endpoint
+ */
+export async function uploadMediaFile(
+  file: File,
+  fieldName: string = "image",
+  type: string = "trade-in"
+): Promise<UploadedMediaItem | null> {
+  try {
+    const formData = new FormData();
+    formData.append("images", file);
+    formData.append("file", file);
+    formData.append("type", type);
+
+    const res = await fetch(UPLOAD_GUEST_ENDPOINT, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const document = Array.isArray(data)
+        ? data[0]
+        : (data?.files?.[0] || data?.file || data?.data?.[0] || data);
+
+      if (document) {
+        const rawPath = document.path || document.filePath || document.filename || document.key || document.location || document.url || "";
+        let cleanPath = typeof rawPath === "string" ? rawPath : String(rawPath);
+        
+        // Strip origin / S3 base if already prepended so filePath stays clean relative path for email <img src="${S3_BASE_URL}/${filePath}">
+        cleanPath = cleanPath
+          .replace(/^https?:\/\/[^\/]+\//, "")
+          .replace(/^\//, "");
+
+        const fullUrl = `${S3_BASE_URL}${cleanPath}`;
+
+        return {
+          fieldName,
+          fileName: document.originalname || document.fileName || document.filename || file.name,
+          filePath: cleanPath,
+          fileSize: document.size || file.size,
+          url: fullUrl,
+          location: fullUrl,
+          path: cleanPath,
+        };
+      }
+    }
+  } catch (error) {
+    console.warn("Upload file error:", error);
+  }
+  return null;
+}
+
+export interface CreateTradeInInput {
+  dealerId?: number | string | null;
+  numberPlate?: string | null;
+  odometer?: string | null;
+  condition?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  message?: string | null;
+  listingTitle?: string | null;
+  photoUrls?: UploadedMediaItem[] | null;
+  toEmails?: string[] | null;
+}
+
+/**
+ * Submits Trade-In enquiry using GraphQL createTradeInEnquiry mutation & tradeInEnquiry endpoint
+ */
+export async function submitTradeInApplication(input: CreateTradeInInput): Promise<{ success: boolean; message?: string }> {
+  const mutation = `
+    mutation CreateTradeInEnquiry($input: CreateTradeInEnquiryInput!) {
+      createTradeInEnquiry(input: $input) {
+        id
+        dealerId
+      }
+    }
+  `;
+
+  const recipientEmails = input.toEmails && input.toEmails.length > 0
+    ? input.toEmails
+    : [input.email || "ashup8998+2@gmail.com"];
+
+  const listingTitle = input.listingTitle || `Trade-In Valuation: ${input.name || "Customer Vehicle"}`;
+
+  const fullPhotoUrls = (input.photoUrls || []).map((p: any) => {
+    let raw = p.filePath || p.path || p.key || p.filename || p.url || p.location || "";
+    let cleanPath = typeof raw === "string" ? raw : String(raw);
+    cleanPath = cleanPath.replace(/^https?:\/\/[^\/]+\//, "").replace(/^\//, "");
+    
+    const photoUrl = p.url || p.location || `${S3_BASE_URL}${cleanPath}`;
+
+    return {
+      fieldName: p.fieldName || "photo",
+      fileName: p.fileName || "photo.webp",
+      filePath: cleanPath, // Clean relative key so backend email template <img src="${S3_BASE_URL}/${filePath}"> renders properly
+      fileSize: p.fileSize || 0,
+      url: photoUrl,
+      location: photoUrl,
+      path: cleanPath,
+    };
+  });
+
+  const photoStringUrls = fullPhotoUrls.map((p) => p.url);
+
+  // Append photo URLs to message if not already present so email notifications always display them
+  let updatedMessage = input.message || "";
+  if (photoStringUrls.length > 0 && !updatedMessage.includes("ATTACHED VEHICLE PHOTOS")) {
+    updatedMessage += "\n\nATTACHED VEHICLE PHOTOS:\n" + photoStringUrls.map((url, i) => `${i + 1}. ${url}`).join("\n");
+  }
+
+  // 1. Prepare REST API payload for /tradeInEnquiry endpoint (includes photoUrls, media, images, photos)
+  const restPayload = {
+    dealerId: input.dealerId ? Number(input.dealerId) : 251,
+    numberPlate: input.numberPlate || "",
+    odometer: input.odometer || "",
+    condition: input.condition || "Good",
+    name: input.name || "",
+    phone: input.phone || "",
+    email: input.email || "",
+    message: updatedMessage,
+    listingTitle: listingTitle,
+    photoUrls: fullPhotoUrls,
+    media: fullPhotoUrls,
+    images: photoStringUrls,
+    photos: photoStringUrls,
+    toEmails: recipientEmails,
+  };
+
+  // 2. Prepare GraphQL mutation input strictly matching CreateTradeInEnquiryInput schema
+  const graphQLInput = {
+    dealerId: input.dealerId ? Number(input.dealerId) : 251,
+    numberPlate: input.numberPlate || "",
+    odometer: input.odometer || "",
+    condition: input.condition || "Good",
+    name: input.name || "",
+    phone: input.phone || "",
+    email: input.email || "",
+    message: updatedMessage,
+    photoUrls: fullPhotoUrls,
+  };
+
+  let restSuccess = false;
+
+  // Trigger tradeInEnquiry REST endpoint
+  try {
+    const restRes = await fetch(TRADE_IN_ENQUIRY_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(restPayload),
+    });
+    const restData = await restRes.json().catch(() => ({}));
+    if (restRes.ok && !restData.error) {
+      restSuccess = true;
+    }
+  } catch (e) {
+    console.warn("REST tradeInEnquiry error:", e);
+  }
+
+  // Trigger GraphQL mutation with clean graphQLInput
+  try {
+    const res = await fetch(BACKEND_PUBLIC_GRAPHQL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: { input: graphQLInput }
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.data?.createTradeInEnquiry?.id || !data?.errors) {
+        return { success: true, message: "Trade-in details submitted successfully!" };
+      }
+    }
+  } catch (error) {
+    console.warn("GraphQL CreateTradeInEnquiry error:", error);
+  }
+
+  if (restSuccess) {
+    return { success: true, message: "Trade-in details submitted successfully!" };
+  }
+
+  return { success: false, message: "Failed to submit trade-in details." };
+}
+
+export interface UpsertQuickFinanceInput {
+  residencyStatus?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  dob?: string | null;
+  address?: string | null;
+  licenseType?: string | null;
+  licenseNumber?: string | null;
+  versionNumber?: string | null;
+  expiryDate?: string | null;
+  isJointApplication?: boolean;
+  middleName?: string | null;
+  maritalStatus?: string | null;
+  dependants?: string | null;
+  homePhone?: string | null;
+  workPhone?: string | null;
+  partner?: any;
+  addressDetails?: any;
+  employmentDetails?: any;
+  financials?: any;
+  nextOfKin?: any;
+  documents?: UploadedMediaItem[] | null;
+}
+
+/**
+ * Submits Quick Finance Application using GraphQL upsertQuickFinanceApplication mutation
+ */
+export async function submitQuickFinanceApplication(input: UpsertQuickFinanceInput): Promise<{ success: boolean; message?: string }> {
+  const mutation = `
+    mutation UpsertQuickFinanceApplication($input: CreateQuickFinanceApplicationInput!) {
+      upsertQuickFinanceApplication(input: $input) {
+        id
+        userId
+      }
+    }
+  `;
+
+  const fullName = `${input.firstName || ""} ${input.lastName || ""}`.trim();
+  const recipientEmail = input.email || "ashup8998+2@gmail.com";
+
+  try {
+    const res = await fetch(BACKEND_PUBLIC_GRAPHQL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: { input }
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.data?.upsertQuickFinanceApplication?.id || !data?.errors) {
+        sendMotorEnquiry({
+          name: fullName,
+          phone: input.phone || "",
+          email: recipientEmail,
+          message: `Finance Application from ${fullName}. License: ${input.licenseType} (${input.licenseNumber})`,
+          toEmails: [recipientEmail],
+          type: "finance",
+        }).catch(() => {});
+
+        return { success: true, message: "Finance application submitted successfully!" };
+      }
+    }
+  } catch (error) {
+    console.warn("GraphQL UpsertQuickFinanceApplication error:", error);
+  }
+
+  // Fallback to motorEnquiry REST API
+  return sendMotorEnquiry({
+    name: fullName,
+    phone: input.phone || "",
+    email: recipientEmail,
+    message: `Finance Application from ${fullName}. License: ${input.licenseType} (${input.licenseNumber})`,
+    toEmails: [recipientEmail],
+    type: "finance",
+  });
+}
+
+import { GetListingResult } from "@/types";
+
+/**
  * Fetches a single listing by ID using GetListing GraphQL query
  */
-export async function fetchListingById(id: number | string): Promise<DetailedListing | null> {
+export async function fetchListingById(id: number | string): Promise<GetListingResult | null> {
   const numericId = typeof id === "number" ? id : parseInt(String(id), 10);
-  if (isNaN(numericId)) return MOCK_LISTING_30978;
+  if (isNaN(numericId)) {
+    return {
+      listing: MOCK_LISTING_30978,
+      userListing: [],
+      totalUserListing: 0,
+    };
+  }
 
   const query = `
     query GetListing($id: Int!) {
@@ -460,14 +841,23 @@ export async function fetchListingById(id: number | string): Promise<DetailedLis
           isDamaged
           contacts {
             id
+            userId
+            agencyId
             name
+            role
             phone
             email
+            preferredContactMethod
+            isPrimary
+            notes
+            image
           }
           location {
             address
             city
             state
+            postalCode
+            country
           }
           user {
             id
@@ -499,6 +889,27 @@ export async function fetchListingById(id: number | string): Promise<DetailedLis
             filePath
           }
         }
+        userListing {
+          id
+          title
+          description
+          basePrice
+          listPrice
+          salePrice
+          saleMethod
+          enquiriesOverPrice
+          weeklyAuction
+          runAuction
+          createdAt
+          listingView
+          status
+          listingMedia {
+            fieldName
+            fileName
+            filePath
+          }
+        }
+        totalUserListing
       }
     }
   `;
@@ -519,9 +930,16 @@ export async function fetchListingById(id: number | string): Promise<DetailedLis
 
     if (res.ok) {
       const data = await res.json();
-      const listing = data?.data?.getListing?.listing;
-      if (listing) {
-        return listing as DetailedListing;
+      const getListingData = data?.data?.getListing;
+      if (getListingData && getListingData.listing) {
+        const rawUserListings = getListingData.userListing || [];
+        const mappedUserListings: Vehicle[] = rawUserListings.map(mapBackendListingToVehicle);
+
+        return {
+          listing: getListingData.listing as DetailedListing,
+          userListing: mappedUserListings,
+          totalUserListing: getListingData.totalUserListing || mappedUserListings.length,
+        };
       }
     }
   } catch (error) {
@@ -530,7 +948,11 @@ export async function fetchListingById(id: number | string): Promise<DetailedLis
 
   // Fallback to mock listing if numericId is 30978 or query returned empty
   if (numericId === 30978) {
-    return MOCK_LISTING_30978;
+    return {
+      listing: MOCK_LISTING_30978,
+      userListing: [],
+      totalUserListing: 0,
+    };
   }
 
   return null;

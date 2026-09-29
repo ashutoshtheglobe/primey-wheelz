@@ -2,12 +2,26 @@
 
 import React, { useState } from "react";
 import { useWebsite } from "@/context/WebsiteContext";
+import {
+  submitQuickFinanceApplication,
+  uploadMediaFile,
+  UploadedMediaItem,
+} from "@/services/backendApi";
+
+interface SelectedDocument {
+  file: File;
+  previewUrl: string;
+}
 
 export default function FinancePage() {
   const { site } = useWebsite();
   const [showForm, setShowForm] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgressMsg, setUploadProgressMsg] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
 
   const [form, setForm] = useState({
     isJointApplication: false,
@@ -24,9 +38,6 @@ export default function FinancePage() {
     phone: "",
     email: "",
     residencyStatus: "",
-    // Partner
-    partnerFirstName: "",
-    partnerLastName: "",
     // Step 2
     livingSituation: "Renting",
     homeAddress: "",
@@ -52,9 +63,97 @@ export default function FinancePage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const fileList = Array.from(e.target.files);
+
+    fileList.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setSelectedDocuments((prev) =>
+            [
+              ...prev,
+              { file, previewUrl: event.target!.result as string },
+            ].slice(0, 5)
+          );
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeDocument = (index: number) => {
+    setSelectedDocuments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setUploadProgressMsg(null);
+
+    // 1. Upload attached documents (driver license, proof of income) to upload-guest if present
+    const uploadedDocs: UploadedMediaItem[] = [];
+    if (selectedDocuments.length > 0) {
+      setUploadProgressMsg(`Uploading ${selectedDocuments.length} document(s)...`);
+      for (let i = 0; i < selectedDocuments.length; i++) {
+        const uploaded = await uploadMediaFile(
+          selectedDocuments[i].file,
+          `document[${i}]`,
+          "finance"
+        );
+        if (uploaded) {
+          uploadedDocs.push(uploaded);
+        }
+      }
+    }
+
+    setUploadProgressMsg("Submitting Finance Application...");
+
+    // 2. Submit UpsertQuickFinanceApplication GraphQL mutation & notification
+    const result = await submitQuickFinanceApplication({
+      residencyStatus: form.residencyStatus,
+      firstName: form.firstName,
+      lastName: form.lastName,
+      middleName: form.middleName,
+      email: form.email,
+      phone: form.phone,
+      dob: form.dob,
+      address: `${form.homeAddress}, ${form.suburb}, ${form.city}`,
+      licenseType: form.licenseType,
+      licenseNumber: form.licenseNumber,
+      versionNumber: form.versionNumber,
+      isJointApplication: form.isJointApplication,
+      maritalStatus: form.maritalStatus,
+      dependants: form.dependants,
+      addressDetails: {
+        address: form.homeAddress,
+        suburb: form.suburb,
+        city: form.city,
+        livingSituation: form.livingSituation,
+      },
+      employmentDetails: {
+        employmentType: form.employmentType,
+      },
+      financials: {
+        primaryIncomeType: form.primaryIncomeType,
+        incomeAmount: Number(form.incomeAmount) || 0,
+        payFrequency: form.payFrequency,
+        rentAmount: Number(form.rentAmount) || 0,
+        rentFrequency: form.rentFrequency,
+      },
+      documents: uploadedDocs,
+    });
+
+    setIsSubmitting(false);
+    setUploadProgressMsg(null);
+
+    if (result.success) {
+      setSubmitted(true);
+    } else {
+      setErrorMessage(result.message || "Failed to submit finance application. Please try again.");
+    }
   };
 
   return (
@@ -80,13 +179,13 @@ export default function FinancePage() {
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <a
                 href={site?.phone ? `tel:${site.phone}` : "#"}
-                className="inline-block px-10 py-4 rounded text-black font-bold transition transform hover:scale-105 bg-[#C2410C] text-white"
+                className="inline-block px-10 py-4 rounded font-bold transition transform hover:scale-105 bg-[#C2410C] text-white"
               >
                 Call {site?.phone || "Us"}
               </a>
               <button
                 onClick={() => setShowForm(true)}
-                className="inline-block px-10 py-4 rounded text-black font-bold transition transform hover:scale-105 bg-white hover:bg-gray-200"
+                className="inline-block px-10 py-4 rounded text-black font-bold transition transform hover:scale-105 bg-white hover:bg-gray-200 font-mono text-sm uppercase"
               >
                 Apply Online Now
               </button>
@@ -98,19 +197,20 @@ export default function FinancePage() {
       {/* Success Screen */}
       {submitted && (
         <div className="max-w-2xl mx-auto px-4 animate-fadeIn">
-          <div className="p-10 border border-green-500/50 rounded-2xl bg-green-500/10 text-center">
+          <div className="p-10 border border-emerald-500/50 rounded-2xl bg-emerald-500/10 text-center">
             <div className="text-6xl mb-4">✅</div>
-            <h2 className="text-3xl font-bold mb-3 font-mono">Application Submitted!</h2>
+            <h2 className="text-3xl font-bold mb-3 font-mono text-emerald-400">Application Submitted!</h2>
             <p className="text-gray-300 text-base leading-relaxed mb-6">
-              Your finance application has been successfully submitted to {site?.companyName || "Primey Wheelz"}. One of our finance specialists will review your details and contact you shortly.
+              Your finance application has been successfully submitted to {site?.companyName || "Primey Wheelz"}. Our finance specialists will review your details and document uploads and contact you shortly.
             </p>
             <button
               onClick={() => {
                 setSubmitted(false);
                 setShowForm(false);
                 setCurrentStep(1);
+                setSelectedDocuments([]);
               }}
-              className="px-8 py-3 bg-white text-black font-bold rounded hover:bg-gray-200 transition"
+              className="px-8 py-3 bg-white text-black font-bold rounded hover:bg-gray-200 transition font-mono uppercase text-xs"
             >
               Back to Finance Overview
             </button>
@@ -132,6 +232,19 @@ export default function FinancePage() {
             <h2 className="text-3xl font-bold font-mono mb-12 text-center text-[#C2410C]">
               Finance Application
             </h2>
+
+            {/* Error banner */}
+            {errorMessage && (
+              <div className="mb-6 p-4 bg-red-950/80 border border-red-500/50 text-red-300 rounded-xl text-sm font-mono text-center">
+                {errorMessage}
+              </div>
+            )}
+
+            {uploadProgressMsg && (
+              <div className="mb-6 p-4 bg-[#C2410C]/20 border border-[#C2410C]/50 text-[#C2410C] rounded-xl text-sm font-mono text-center animate-pulse">
+                {uploadProgressMsg}
+              </div>
+            )}
 
             {/* Step Indicators */}
             <div className="flex items-center justify-between max-w-xl mx-auto mb-12 relative">
@@ -331,7 +444,7 @@ export default function FinancePage() {
                     <button
                       type="button"
                       onClick={() => setCurrentStep(2)}
-                      className="px-8 py-3 bg-[#C2410C] text-white font-bold rounded hover:bg-[#a33509] transition"
+                      className="px-8 py-3 bg-[#C2410C] text-white font-bold rounded hover:bg-[#a33509] transition font-mono uppercase text-xs"
                     >
                       Next Step: Address & Work &rarr;
                     </button>
@@ -431,14 +544,14 @@ export default function FinancePage() {
                     <button
                       type="button"
                       onClick={() => setCurrentStep(1)}
-                      className="px-6 py-3 bg-zinc-800 text-gray-300 font-bold rounded hover:bg-zinc-700 transition"
+                      className="px-6 py-3 bg-zinc-800 text-gray-300 font-bold rounded hover:bg-zinc-700 transition font-mono uppercase text-xs"
                     >
                       &larr; Back
                     </button>
                     <button
                       type="button"
                       onClick={() => setCurrentStep(3)}
-                      className="px-8 py-3 bg-[#C2410C] text-white font-bold rounded hover:bg-[#a33509] transition"
+                      className="px-8 py-3 bg-[#C2410C] text-white font-bold rounded hover:bg-[#a33509] transition font-mono uppercase text-xs"
                     >
                       Next Step: Financials &rarr;
                     </button>
@@ -536,18 +649,70 @@ export default function FinancePage() {
                     </div>
                   </div>
 
+                  {/* DOCUMENT / LICENSE PHOTO ATTACHMENT SECTION */}
+                  <div className="pt-6 border-t border-white/10">
+                    <h4 className="text-sm font-bold font-mono text-[#C2410C] mb-2 uppercase">
+                      Attach Driver License / Proof of Income (Optional)
+                    </h4>
+                    <p className="text-xs text-gray-400 mb-4">
+                      Upload photos or PDF copies of your NZ Driver License or recent payslip for faster processing.
+                    </p>
+
+                    <div className="flex flex-wrap gap-4 items-center mb-4">
+                      <label className="cursor-pointer inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-white font-bold transition transform hover:scale-105 bg-[#C2410C] text-xs font-mono uppercase">
+                        <span>Upload Document...</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={handleDocumentUpload}
+                        />
+                      </label>
+                      <span className="text-xs text-gray-400 font-mono">
+                        Uploaded: {selectedDocuments.length} / 5
+                      </span>
+                    </div>
+
+                    {selectedDocuments.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                        {selectedDocuments.map((doc, idx) => (
+                          <div
+                            key={idx}
+                            className="relative group aspect-[4/3] rounded-xl overflow-hidden border border-white/10 bg-neutral-900 flex items-center justify-center p-2"
+                          >
+                            {doc.file.type.startsWith("image/") ? (
+                              <img src={doc.previewUrl} alt={`Doc ${idx + 1}`} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="text-center font-mono text-xs text-gray-300">
+                                📄 {doc.file.name}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeDocument(idx)}
+                              className="absolute top-2 right-2 bg-black/80 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center transition text-xs"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex justify-between pt-6">
                     <button
                       type="button"
                       onClick={() => setCurrentStep(2)}
-                      className="px-6 py-3 bg-zinc-800 text-gray-300 font-bold rounded hover:bg-zinc-700 transition"
+                      className="px-6 py-3 bg-zinc-800 text-gray-300 font-bold rounded hover:bg-zinc-700 transition font-mono uppercase text-xs"
                     >
                       &larr; Back
                     </button>
                     <button
                       type="button"
                       onClick={() => setCurrentStep(4)}
-                      className="px-8 py-3 bg-[#C2410C] text-white font-bold rounded hover:bg-[#a33509] transition"
+                      className="px-8 py-3 bg-[#C2410C] text-white font-bold rounded hover:bg-[#a33509] transition font-mono uppercase text-xs"
                     >
                       Next Step: Review & Apply &rarr;
                     </button>
@@ -567,6 +732,9 @@ export default function FinancePage() {
                     <p><strong>NZ License:</strong> {form.licenseType} ({form.licenseNumber})</p>
                     <p><strong>Address:</strong> {form.homeAddress}, {form.suburb}, {form.city}</p>
                     <p><strong>Employment:</strong> {form.employmentType} ({form.primaryIncomeType} - ${form.incomeAmount}/{form.payFrequency})</p>
+                    {selectedDocuments.length > 0 && (
+                      <p><strong>Attached Documents:</strong> {selectedDocuments.length} file(s)</p>
+                    )}
                   </div>
 
                   <div className="p-4 bg-zinc-900 rounded-lg border border-white/10 text-xs text-gray-400">
@@ -577,15 +745,16 @@ export default function FinancePage() {
                     <button
                       type="button"
                       onClick={() => setCurrentStep(3)}
-                      className="px-6 py-3 bg-zinc-800 text-gray-300 font-bold rounded hover:bg-zinc-700 transition"
+                      className="px-6 py-3 bg-zinc-800 text-gray-300 font-bold rounded hover:bg-zinc-700 transition font-mono uppercase text-xs"
                     >
                       &larr; Back
                     </button>
                     <button
                       type="submit"
-                      className="px-10 py-4 bg-[#C2410C] text-white font-bold rounded text-sm uppercase tracking-wider hover:bg-[#a33509] transition shadow-lg"
+                      disabled={isSubmitting}
+                      className="px-10 py-4 bg-[#C2410C] text-white font-bold rounded text-sm uppercase font-mono tracking-wider hover:bg-[#a33509] transition shadow-lg disabled:opacity-50"
                     >
-                      Submit Finance Application
+                      {isSubmitting ? "Submitting Application..." : "Submit Finance Application"}
                     </button>
                   </div>
                 </div>

@@ -17,6 +17,7 @@ export default function VehiclesPage() {
   const [sortBy, setSortBy] = useState<string>("latest");
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [favCount, setFavCount] = useState<number>(0);
+  const [favIds, setFavIds] = useState<string[]>([]);
   const [cardsVisible, setCardsVisible] = useState<boolean>(false);
 
   useEffect(() => {
@@ -32,7 +33,9 @@ export default function VehiclesPage() {
     loadData();
 
     const updateFavs = () => {
-      setFavCount(getFavourites().length);
+      const favs = getFavourites();
+      setFavCount(favs.length);
+      setFavIds(favs.map((f) => String(f.id)));
     };
     updateFavs();
 
@@ -248,7 +251,7 @@ export default function VehiclesPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {sortedVehicles.map((vehicle, index) => {
-              const fav = isFavourite(vehicle.id);
+              const fav = favIds.includes(String(vehicle.id));
               const saleMethodInfo = determineSaleMethod(vehicle);
               const specParts = [
                 vehicle.kilometers ? `${vehicle.kilometers.toLocaleString("en-NZ")}km` : "",
@@ -385,12 +388,12 @@ export default function VehiclesPage() {
                     <button
                       onClick={(e) => handleFavToggle(e, selectedVehicle)}
                       className={`text-xs px-3 py-1 rounded-full font-bold transition flex items-center gap-1 ${
-                        isFavourite(selectedVehicle.id)
+                        favIds.includes(String(selectedVehicle.id))
                           ? "bg-red-600 text-white"
                           : "bg-zinc-800 text-gray-300 hover:text-white"
                       }`}
                     >
-                      ❤️ {isFavourite(selectedVehicle.id) ? "Saved in Garage" : "Save to Garage"}
+                      ❤️ {favIds.includes(String(selectedVehicle.id)) ? "Saved in Garage" : "Save to Garage"}
                     </button>
                   </div>
 

@@ -1,10 +1,25 @@
 "use client";
 
 import React, { useState } from "react";
+import { useWebsite } from "@/context/WebsiteContext";
+import {
+  submitTradeInApplication,
+  uploadMediaFile,
+  UploadedMediaItem,
+} from "@/services/backendApi";
+
+interface SelectedPhoto {
+  file: File;
+  previewUrl: string;
+}
 
 export default function PriceMyTradePage() {
+  const { site } = useWebsite();
   const [submitted, setSubmitted] = useState(false);
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgressMsg, setUploadProgressMsg] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -35,13 +50,17 @@ export default function PriceMyTradePage() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const fileList = Array.from(e.target.files);
-    const newPhotos: string[] = [];
 
     fileList.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         if (event.target?.result) {
-          setPhotos((prev) => [...prev, event.target!.result as string].slice(0, 5));
+          setSelectedPhotos((prev) =>
+            [
+              ...prev,
+              { file, previewUrl: event.target!.result as string },
+            ].slice(0, 5)
+          );
         }
       };
       reader.readAsDataURL(file);
@@ -49,12 +68,80 @@ export default function PriceMyTradePage() {
   };
 
   const removePhoto = (index: number) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
+    setSelectedPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setUploadProgressMsg(null);
+
+    const fullName = `${form.firstName} ${form.lastName}`.trim();
+
+    // 1. Upload photos to backend S3 /upload-guest if any are attached
+    const uploadedMedia: UploadedMediaItem[] = [];
+    if (selectedPhotos.length > 0) {
+      setUploadProgressMsg(`Uploading ${selectedPhotos.length} vehicle photo(s)...`);
+      for (let i = 0; i < selectedPhotos.length; i++) {
+        const uploaded = await uploadMediaFile(
+          selectedPhotos[i].file,
+          `photo[${i}]`,
+          "trade-in"
+        );
+        if (uploaded) {
+          uploadedMedia.push(uploaded);
+        }
+      }
+    }
+
+    setUploadProgressMsg("Submitting Trade-In Enquiry...");
+
+    const formattedMessage = `
+TRADE-IN VEHICLE SPECIFICATIONS:
+Vehicle: ${form.year} ${form.make} ${form.model} ${form.variant ? `(${form.variant})` : ""}
+Odometer: ${form.odometer} km
+Transmission: ${form.transmission}
+Plate / Rego: ${form.plateNo || "N/A"}
+Color: ${form.colour || "N/A"}
+
+CUSTOMER INFORMATION:
+Name: ${fullName}
+Email: ${form.email}
+Phone: ${form.mobilePhone}
+City / Suburb: ${form.city} ${form.suburb ? `(${form.suburb})` : ""}
+
+COMMENTS:
+${form.comments || "None"}
+`.trim();
+
+    const tradeTitle = `${form.year} ${form.make} ${form.model}`.trim() || "Trade-In Vehicle";
+
+    // 2. Submit CreateTradeInEnquiry GraphQL mutation & notification
+    const recipientEmails = site?.email ? [site.email] : [form.email];
+
+    const result = await submitTradeInApplication({
+      dealerId: site?.userId || 251,
+      numberPlate: form.plateNo || "",
+      odometer: form.odometer || "",
+      condition: "Good",
+      name: fullName,
+      phone: form.mobilePhone,
+      email: form.email,
+      message: formattedMessage,
+      listingTitle: tradeTitle,
+      photoUrls: uploadedMedia,
+      toEmails: recipientEmails,
+    });
+
+    setIsSubmitting(false);
+    setUploadProgressMsg(null);
+
+    if (result.success) {
+      setSubmitted(true);
+    } else {
+      setErrorMessage(result.message || "Failed to submit trade-in valuation. Please try again.");
+    }
   };
 
   return (
@@ -72,16 +159,16 @@ export default function PriceMyTradePage() {
       {/* Success Screen */}
       {submitted ? (
         <div className="max-w-2xl mx-auto px-4 animate-fadeIn">
-          <div className="p-12 border border-green-500/30 rounded-2xl bg-green-500/10 text-center backdrop-blur-xl">
+          <div className="p-12 border border-emerald-500/30 rounded-2xl bg-emerald-500/10 text-center backdrop-blur-xl">
             <div className="text-6xl mb-6">🚗✨</div>
-            <h2 className="text-3xl font-bold mb-4 font-mono">Trade-In Submitted!</h2>
+            <h2 className="text-3xl font-bold mb-4 font-mono text-emerald-400">Trade-In Submitted!</h2>
             <p className="text-gray-300 mb-8 leading-relaxed">
-              Thank you for submitting your details. We have received your trade-in request and vehicle photos. Our valuation team will review your vehicle and get back to you with a competitive offer shortly.
+              Thank you for submitting your trade-in request to {site?.companyName || "Primey Wheelz"}. Our valuation team will review your vehicle details and photo uploads to provide you with a competitive offer.
             </p>
             <button
               onClick={() => {
                 setSubmitted(false);
-                setPhotos([]);
+                setSelectedPhotos([]);
               }}
               className="px-8 py-3 rounded-lg font-semibold transition bg-white text-black hover:bg-gray-200 font-mono text-sm uppercase"
             >
@@ -93,6 +180,18 @@ export default function PriceMyTradePage() {
         /* Main Form */
         <div className="max-w-5xl mx-auto px-4">
           <div className="p-8 md:p-12 border border-white/10 rounded-2xl bg-zinc-900 shadow-2xl relative">
+            {errorMessage && (
+              <div className="mb-6 p-4 bg-red-950/80 border border-red-500/50 text-red-300 rounded-xl text-sm font-mono text-center">
+                {errorMessage}
+              </div>
+            )}
+
+            {uploadProgressMsg && (
+              <div className="mb-6 p-4 bg-[#C2410C]/20 border border-[#C2410C]/50 text-[#C2410C] rounded-xl text-sm font-mono text-center animate-pulse">
+                {uploadProgressMsg}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit}>
               {/* SECTION 1: YOUR DETAILS */}
               <div className="mb-12">
@@ -305,18 +404,18 @@ export default function PriceMyTradePage() {
                     />
                   </label>
                   <span className="text-sm text-gray-400 font-mono">
-                    Uploaded: {photos.length} / 5
+                    Uploaded: {selectedPhotos.length} / 5
                   </span>
                 </div>
 
-                {photos.length > 0 && (
+                {selectedPhotos.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mt-6">
-                    {photos.map((src, idx) => (
+                    {selectedPhotos.map((photo, idx) => (
                       <div
                         key={idx}
                         className="relative group aspect-square rounded-xl overflow-hidden border border-white/10 bg-neutral-900"
                       >
-                        <img src={src} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                        <img src={photo.previewUrl} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => removePhoto(idx)}
@@ -349,9 +448,10 @@ export default function PriceMyTradePage() {
               <div className="flex justify-end border-t border-white/10 pt-8">
                 <button
                   type="submit"
-                  className="inline-block px-12 py-4 rounded-lg text-white font-bold transition transform hover:scale-105 bg-[#C2410C] font-mono uppercase tracking-wider text-sm shadow-xl"
+                  disabled={isSubmitting}
+                  className="inline-block px-12 py-4 rounded-lg text-white font-bold transition transform hover:scale-105 bg-[#C2410C] font-mono uppercase tracking-wider text-sm shadow-xl disabled:opacity-50"
                 >
-                  Submit Trade-In Valuation
+                  {isSubmitting ? "Submitting Request..." : "Submit Trade-In Valuation"}
                 </button>
               </div>
             </form>

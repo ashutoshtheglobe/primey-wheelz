@@ -62,15 +62,24 @@ export interface Vehicle {
 
 export interface ListingContact {
   id?: number | null;
+  userId?: string;
+  agencyId?: string;
   name?: string;
+  role?: string;
   phone?: string;
   email?: string;
+  preferredContactMethod?: string;
+  isPrimary?: boolean;
+  notes?: string;
+  image?: string;
 }
 
 export interface ListingLocation {
   address?: string;
   city?: string;
   state?: string;
+  postalCode?: string;
+  country?: string;
 }
 
 export interface UserBusinessFinance {
@@ -134,3 +143,10 @@ export interface DetailedListing {
   listingAttributeOptions?: ListingAttributeOption[];
   listingMedia?: ListingMedia[];
 }
+
+export interface GetListingResult {
+  listing: DetailedListing;
+  userListing: Vehicle[];
+  totalUserListing: number;
+}
+

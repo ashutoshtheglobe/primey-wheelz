@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Vehicle } from "@/types";
 import { fetchUser251Listings } from "@/services/backendApi";
 import { useWebsite } from "@/context/WebsiteContext";
-import { toggleFavourite } from "@/utils/favourites";
+import { toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
 export default function Home() {
@@ -13,6 +13,16 @@ export default function Home() {
   const [featuredVehicles, setFeaturedVehicles] = useState<Vehicle[]>([]);
   const [totalVehicles, setTotalVehicles] = useState<number>(0);
   const [loadingListings, setLoadingListings] = useState<boolean>(true);
+  const [favIds, setFavIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const syncFavs = () => {
+      setFavIds(getFavourites().map((f) => String(f.id)));
+    };
+    syncFavs();
+    window.addEventListener("favouritesUpdated", syncFavs);
+    return () => window.removeEventListener("favouritesUpdated", syncFavs);
+  }, []);
 
   // Scroll reveal observer state for Latest Vehicles
   const [sectionVisible, setSectionVisible] = useState(false);
@@ -351,19 +361,26 @@ export default function Home() {
                       </div>
 
                       {/* Top-Right Garage Icon Badge */}
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          toggleFavourite(vehicle);
-                        }}
-                        className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 backdrop-blur-md text-zinc-900 flex items-center justify-center shadow-lg hover:scale-110 transition cursor-pointer z-10"
-                        title="Save to My Garage"
-                      >
-                        <svg className="w-4.5 h-4.5 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11h4v10" />
-                        </svg>
-                      </button>
+                      {(() => {
+                        const isFav = favIds.includes(String(vehicle.id));
+                        return (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleFavourite(vehicle);
+                            }}
+                            className={`absolute top-3 right-3 w-9 h-9 rounded-full backdrop-blur-md flex items-center justify-center shadow-lg transition transform hover:scale-110 cursor-pointer z-10 ${
+                              isFav ? "bg-red-600 text-white" : "bg-white/90 text-zinc-900 hover:bg-white"
+                            }`}
+                            title={isFav ? "Remove from Garage" : "Save to My Garage"}
+                          >
+                            <svg className={`w-4.5 h-4.5 ${isFav ? "fill-current" : "fill-none stroke-current stroke-2"}`} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11h4v10" />
+                            </svg>
+                          </button>
+                        );
+                      })()}
                     </div>
 
                     {/* Content Details (Dynamic GraphQL payload data) */}
