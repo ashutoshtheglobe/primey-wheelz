@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { WebsiteProvider } from "@/context/WebsiteContext";
+import { fetchWebsiteConfig } from "@/services/backendApi";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,10 +16,46 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Primey Wheelz | Quality Vehicles & Easy Finance",
-  description: "Browse quality used cars, apply for easy vehicle finance, and get instant trade-in valuations.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await fetchWebsiteConfig("primey-wheels");
+  const companyName = site?.companyName || "Primey Wheelz";
+  const defaultTitle = `${companyName} | Quality Vehicles & Easy Finance`;
+  const description =
+    site?.metaDescription ||
+    "Browse quality used cars, apply for easy vehicle finance, and get instant trade-in valuations.";
+  const logo =
+    site?.logo || "https://img.theglobe.nz/assets/images/theglobe-logo.svg";
+
+  return {
+    title: {
+      default: defaultTitle,
+      template: `%s | ${companyName}`,
+    },
+    description,
+    icons: {
+      icon: logo,
+      shortcut: logo,
+      apple: logo,
+    },
+    openGraph: {
+      title: defaultTitle,
+      description,
+      siteName: companyName,
+      images: [
+        {
+          url: logo,
+          alt: companyName,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: defaultTitle,
+      description,
+      images: [logo],
+    },
+  };
+}
 
 export default function RootLayout({
   children,
