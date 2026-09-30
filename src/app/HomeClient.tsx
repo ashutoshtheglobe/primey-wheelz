@@ -136,11 +136,11 @@ export default function Home() {
 
         <div className="relative z-10 text-center max-w-4xl mx-auto px-6 py-20">
           <span className="text-[#C2410C] font-mono text-xs md:text-sm uppercase tracking-widest font-extrabold bg-[#C2410C]/10 px-4 py-2 rounded-full border border-[#C2410C]/30 inline-block mb-6">
-            Welcome to Christchurch&apos;s Premium Dealership
+            Welcome to Auckland&apos;s Premium Dealership
           </span>
 
           <h1 className="text-4xl md:text-7xl font-black text-white uppercase tracking-tight font-mono drop-shadow-2xl leading-tight">
-            Welcome to <span className="text-[#C2410C]">{site?.companyName || "Primey Wheelz"}</span>
+            Welcome to <span className="text-[#C2410C]">{site?.companyName || "Primey Wheelz"} NZ</span>
           </h1>
 
           <p className="mt-6 text-xl md:text-2xl text-gray-300 font-light max-w-2xl mx-auto leading-relaxed">
@@ -606,8 +606,8 @@ export default function Home() {
               },
               {
                 icon: "💼",
-                title: "Business Loans",
-                desc: "Ute and commercial vehicle leasing & loan options for company fleets.",
+                title: "Special Offers",
+                desc: "Explore our latest offers, exclusive deals, and flexible financing options designed to help you save more.",
               },
               {
                 icon: "🔄",
