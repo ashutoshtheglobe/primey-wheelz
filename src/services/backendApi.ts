@@ -168,10 +168,10 @@ function mapBackendListingToVehicle(item: BackendListing): Vehicle {
 }
 
 /**
- * Fetches user 251 listings dynamically from backend GraphQL
+ * Fetches user 883 listings dynamically from backend GraphQL
  */
-export async function fetchUser251Listings(
-  userId: number = 251,
+export async function fetchUser883Listings(
+  userId: number = 883,
   page: number = 1,
   perPage: number = 12,
   keyword: string = ""
@@ -261,9 +261,9 @@ export async function fetchUser251Listings(
 }
 
 /**
- * Executes `GetCurrentWebsite` query with variables `{ slug: "primey-wheels" }`
+ * Executes `GetCurrentWebsite` query with variables `{ slug: "primey-wheelz" }`
  */
-export async function fetchWebsiteConfig(slug: string = "primey-wheels"): Promise<WebsiteData | null> {
+export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promise<WebsiteData | null> {
   const query = `
     query GetCurrentWebsite($slug: String) {
       getCurrentWebsite(slug: $slug) {
@@ -748,7 +748,7 @@ export interface UpsertQuickFinanceInput {
  */
 export async function submitWebsiteFinanceApplication(
   payload: any,
-  slug: string = "primey-wheels"
+  slug: string = "primey-wheelz"
 ): Promise<{ success: boolean; message?: string }> {
   const mutation = `
     mutation SubmitWebsiteFinanceApplication($slug: String, $payload: JSON!) {

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Vehicle } from "@/types";
-import { fetchUser251Listings } from "@/services/backendApi";
+import { fetchUser883Listings } from "@/services/backendApi";
 import { useWebsite } from "@/context/WebsiteContext";
 import { toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
@@ -39,7 +39,7 @@ export default function Home() {
   useEffect(() => {
     async function loadBackendData() {
       setLoadingListings(true);
-      const listingsData = await fetchUser251Listings(251, 1, 3);
+      const listingsData = await fetchUser883Listings(883, 1, 3);
       setFeaturedVehicles(listingsData.listings);
       setTotalVehicles(listingsData.total);
       setLoadingListings(false);

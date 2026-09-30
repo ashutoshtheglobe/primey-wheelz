@@ -3,9 +3,9 @@ import { fetchWebsiteConfig } from "@/services/backendApi";
 import ContactClient from "./ContactClient";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const site = await fetchWebsiteConfig("primey-wheels");
+  const site = await fetchWebsiteConfig("primey-wheelz");
   const siteName = site?.companyName || "Primey Wheelz";
-  const domain = site?.customDomain || "primewheels.co.nz";
+  const domain = site?.customDomain || "primeywheelz.co.nz";
 
   const title = `Contact Us | ${siteName}`;
   const description =

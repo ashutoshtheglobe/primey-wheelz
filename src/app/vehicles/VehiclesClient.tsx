@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Vehicle } from "@/types";
-import { fetchUser251Listings } from "@/services/backendApi";
+import { fetchUser883Listings } from "@/services/backendApi";
 import { isFavourite, toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
@@ -24,7 +24,7 @@ export default function VehiclesPage() {
     async function loadData() {
       setLoading(true);
       setCardsVisible(false);
-      const response = await fetchUser251Listings(251, 1, 36, searchQuery);
+      const response = await fetchUser883Listings(883, 1, 36, searchQuery);
       setVehicles(response.listings);
       setTotalCount(response.total);
       setLoading(false);

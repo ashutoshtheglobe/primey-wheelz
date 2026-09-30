@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const site = await fetchWebsiteConfig("primey-wheels");
+  const site = await fetchWebsiteConfig("primey-wheelz");
   const companyName = site?.companyName || "Primey Wheelz";
   const defaultTitle = `${companyName} | Quality Vehicles & Easy Finance`;
   const description =

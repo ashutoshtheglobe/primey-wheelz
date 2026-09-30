@@ -477,7 +477,7 @@ export default function FinanceClient() {
         documents: uploadedDocuments,
       };
 
-      const result = await submitWebsiteFinanceApplication(payload, site?.slug || "primey-wheels");
+      const result = await submitWebsiteFinanceApplication(payload, site?.slug || "primey-wheelz");
 
       setIsSubmitting(false);
 

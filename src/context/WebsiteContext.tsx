@@ -21,7 +21,7 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function loadData() {
       try {
-        const data = await fetchWebsiteConfig("primey-wheels");
+        const data = await fetchWebsiteConfig("primey-wheelz");
         setSite(data);
       } catch (err) {
         console.error("Error loading website config:", err);

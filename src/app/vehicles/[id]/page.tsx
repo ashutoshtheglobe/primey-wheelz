@@ -16,11 +16,11 @@ export async function generateMetadata({
 
   const [data, site] = await Promise.all([
     fetchListingById(listingId),
-    fetchWebsiteConfig("primey-wheels"),
+    fetchWebsiteConfig("primey-wheelz"),
   ]);
 
   const siteName = site?.companyName || "Primey Wheelz";
-  const domain = site?.customDomain || "primewheels.co.nz";
+  const domain = site?.customDomain || "primeywheelz.co.nz";
 
   if (!data || !data.listing) {
     return {

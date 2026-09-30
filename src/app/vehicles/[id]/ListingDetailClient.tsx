@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   fetchListingById,
   getListingImageUrls,
-  fetchUser251Listings,
+  fetchUser883Listings,
   sendMotorEnquiry,
 } from "@/services/backendApi";
 import { DetailedListing, Vehicle, ListingContact } from "@/types";
@@ -65,7 +65,7 @@ export default function ListingDetailPage({
       }
 
       // Fetch fallback recommended listings if seller listings are empty
-      const recentRes = await fetchUser251Listings(251, 1, 4);
+      const recentRes = await fetchUser883Listings(883, 1, 4);
       setSimilarVehicles(recentRes.listings.filter((v) => String(v.id) !== String(listingId)));
 
       setLoading(false);
