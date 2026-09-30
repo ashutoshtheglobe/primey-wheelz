@@ -2,10 +2,13 @@
 
 import React, { useState } from "react";
 import { useWebsite } from "@/context/WebsiteContext";
+import { submitWebsiteContactEnquiry } from "@/services/backendApi";
 
 export default function ContactPage() {
   const { site } = useWebsite();
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -19,9 +22,27 @@ export default function ContactPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitting(true);
+    setErrorMsg("");
+
+    const payload = {
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      subject: form.subject,
+      message: form.message,
+    };
+
+    const res = await submitWebsiteContactEnquiry(payload, site?.slug || "primey-wheelz");
+    setSubmitting(false);
+
+    if (res.success) {
+      setSubmitted(true);
+    } else {
+      setErrorMsg(res.message || "Failed to submit message. Please try again.");
+    }
   };
 
   return (
@@ -233,12 +254,19 @@ export default function ContactPage() {
                     />
                   </div>
 
+                  {errorMsg && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/40 rounded text-red-400 text-xs font-mono">
+                      {errorMsg}
+                    </div>
+                  )}
+
                   <div className="flex justify-end pt-2">
                     <button
                       type="submit"
-                      className="px-10 py-4 bg-[#C2410C] text-white font-bold font-mono text-xs uppercase tracking-wider rounded hover:bg-[#a33509] transition shadow-lg"
+                      disabled={submitting}
+                      className="px-10 py-4 bg-[#C2410C] text-white font-bold font-mono text-xs uppercase tracking-wider rounded hover:bg-[#a33509] transition shadow-lg disabled:opacity-50 cursor-pointer"
                     >
-                      Submit Message
+                      {submitting ? "Submitting..." : "Submit Message"}
                     </button>
                   </div>
                 </form>

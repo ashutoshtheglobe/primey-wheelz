@@ -84,7 +84,7 @@ export default function VehiclesPage() {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans pb-28 pt-28 md:pt-32">
-      <div className="max-w-7xl mx-auto px-4 md:px-6">
+      <div className="max-w-[1720px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10">
         
         {/* Page Title Header (e.g. "Ute listings for sale" matching screenshot) */}
         <div className="mb-6">

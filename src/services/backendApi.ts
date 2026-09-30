@@ -786,6 +786,48 @@ export async function submitWebsiteFinanceApplication(
 }
 
 /**
+ * Submits Website Contact Enquiry using GraphQL submitWebsiteContactEnquiry mutation
+ */
+export async function submitWebsiteContactEnquiry(
+  payload: any,
+  slug: string = "primey-wheelz"
+): Promise<{ success: boolean; message?: string }> {
+  const mutation = `
+    mutation SubmitWebsiteContactEnquiry($slug: String, $payload: JSON!) {
+      submitWebsiteContactEnquiry(slug: $slug, payload: $payload)
+    }
+  `;
+
+  try {
+    const res = await fetch(BACKEND_PUBLIC_GRAPHQL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: { slug, payload }
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.data?.submitWebsiteContactEnquiry) {
+        return { success: true, message: "Contact enquiry submitted successfully!" };
+      }
+      if (data?.errors && data.errors.length > 0) {
+        return { success: false, message: data.errors[0].message };
+      }
+    }
+  } catch (error) {
+    console.warn("GraphQL SubmitWebsiteContactEnquiry error:", error);
+  }
+
+  return { success: false, message: "Failed to submit contact enquiry. Please try again." };
+}
+
+/**
  * Submits Quick Finance Application using GraphQL upsertQuickFinanceApplication mutation
  */
 export async function submitQuickFinanceApplication(input: UpsertQuickFinanceInput): Promise<{ success: boolean; message?: string }> {

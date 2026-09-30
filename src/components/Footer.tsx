@@ -2,9 +2,12 @@
 
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useWebsite } from "@/context/WebsiteContext";
 
 export default function Footer() {
+  const pathname = usePathname();
+  const isVehiclesPage = pathname === "/vehicles";
   const { site } = useWebsite();
   const currentYear = new Date().getFullYear();
 
@@ -31,7 +34,7 @@ export default function Footer() {
       {/* Skewed right background graphic matching reference layout */}
       <div className="absolute right-0 top-0 bottom-0 w-[40%] bg-zinc-900/40 transform -skew-x-12 origin-top-right translate-x-24 hidden lg:block border-l border-zinc-800/60 z-0 pointer-events-none" />
 
-      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 relative z-10">
+      <div className={`${isVehiclesPage ? "max-w-[1720px] px-4 sm:px-6 md:px-8 lg:px-10" : "max-w-7xl px-6"} mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 relative z-10`}>
         {/* Column 1: CONTACT US */}
         <div className="flex flex-col items-start space-y-6">
           <div>
@@ -266,7 +269,7 @@ export default function Footer() {
       </div>
 
       {/* Bottom Bar: Copyright and Nav Links */}
-      <div className="max-w-7xl mx-auto px-6 pt-10 mt-16 border-t border-zinc-900 relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-gray-400 font-mono">
+      <div className={`${isVehiclesPage ? "max-w-[1720px] px-4 sm:px-6 md:px-8 lg:px-10" : "max-w-7xl px-6"} mx-auto pt-10 mt-16 border-t border-zinc-900 relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-gray-400 font-mono`}>
         <p className="text-gray-400 text-xs tracking-wider">
           &copy; {currentYear} {companyName || "PRIMEY WHEELZ"} LIMITED | POWERED BY {poweredBy || "PRIMEY WHEELZ"}
         </p>
