@@ -199,21 +199,9 @@ export default function Home() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             {[
               {
-                title: "Ute",
-                image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80",
-                href: "/vehicles?bodyStyle=Ute",
-                span: "col-span-1",
-              },
-              {
                 title: "SUV",
                 image: "https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=800&q=80",
                 href: "/vehicles?bodyStyle=SUV",
-                span: "col-span-1",
-              },
-              {
-                title: "Performance",
-                image: "https://images.unsplash.com/photo-1584345604476-8ec5e12e42dd?auto=format&fit=crop&w=800&q=80",
-                href: "/vehicles?bodyStyle=Performance",
                 span: "col-span-1",
               },
               {
