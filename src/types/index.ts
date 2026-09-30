@@ -27,7 +27,6 @@ export interface WebsiteData {
   poweredBy?: string;
   openingHours: string[];
   metaDescription?: string;
-  showVehicleDetailPage?: string;
   status?: string;
 }
 

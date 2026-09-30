@@ -294,7 +294,6 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheels"): Promis
         poweredBy
         openingHours
         metaDescription
-        showVehicleDetailPage
         status
       }
     }
@@ -347,7 +346,6 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheels"): Promis
           poweredBy: site.poweredBy || "",
           openingHours: site.openingHours ? site.openingHours.split("\n") : [],
           metaDescription: site.metaDescription,
-          showVehicleDetailPage: site.showVehicleDetailPage,
           status: site.status
         };
       }
