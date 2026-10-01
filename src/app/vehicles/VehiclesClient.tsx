@@ -21,7 +21,7 @@ export default function VehiclesPage() {
   const [cardsVisible, setCardsVisible] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const perPage = 10;
+  const perPage = 12;
 
   useEffect(() => {
     let isMounted = true;
@@ -247,7 +247,7 @@ export default function VehiclesPage() {
         {/* Vehicle Cards Grid (4 Columns Desktop layout matching screenshot) */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
+            {Array.from({ length: 12 }).map((_, idx) => (
               <div key={idx} className="bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 animate-pulse h-80" />
             ))}
           </div>

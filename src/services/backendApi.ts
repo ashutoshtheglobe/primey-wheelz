@@ -73,6 +73,30 @@ function resolveS3Url(path: string | null | undefined): string | undefined {
   return `${S3_BASE_URL}${path}`;
 }
 
+function sortListingMedia<T extends { fieldName?: string }>(media: T[]): T[] {
+  if (!media || media.length <= 1) return media || [];
+  return [...media].sort((a, b) => {
+    const nameA = (a.fieldName || "").toLowerCase().trim();
+    const nameB = (b.fieldName || "").toLowerCase().trim();
+
+    const isFeatureA =
+      nameA.includes("feature") ||
+      nameA.includes("main") ||
+      nameA.includes("cover") ||
+      nameA === "image";
+    const isFeatureB =
+      nameB.includes("feature") ||
+      nameB.includes("main") ||
+      nameB.includes("cover") ||
+      nameB === "image";
+
+    if (isFeatureA && !isFeatureB) return -1;
+    if (!isFeatureA && isFeatureB) return 1;
+
+    return nameA.localeCompare(nameB, undefined, { numeric: true });
+  });
+}
+
 function mapBackendListingToVehicle(item: BackendListing): Vehicle {
   const getAttr = (...names: string[]): string => {
     if (!item.listingAttributeOptions) return "";
@@ -87,7 +111,8 @@ function mapBackendListingToVehicle(item: BackendListing): Vehicle {
 
   const images: string[] = [];
   if (item.listingMedia && item.listingMedia.length > 0) {
-    item.listingMedia.forEach((m) => {
+    const sortedMedia = sortListingMedia(item.listingMedia);
+    sortedMedia.forEach((m) => {
       if (m.filePath) {
         if (m.filePath.startsWith("http")) {
           images.push(m.filePath);
@@ -1098,7 +1123,8 @@ export async function fetchListingById(id: number | string): Promise<GetListingR
 export function getListingImageUrls(listing: DetailedListing): string[] {
   const images: string[] = [];
   if (listing.listingMedia && listing.listingMedia.length > 0) {
-    listing.listingMedia.forEach((m) => {
+    const sortedMedia = sortListingMedia(listing.listingMedia);
+    sortedMedia.forEach((m) => {
       if (m.filePath) {
         if (m.filePath.startsWith("http://") || m.filePath.startsWith("https://")) {
           images.push(m.filePath);
