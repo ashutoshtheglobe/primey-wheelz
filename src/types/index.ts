@@ -28,6 +28,8 @@ export interface WebsiteData {
   openingHours: string[];
   metaDescription?: string;
   status?: string;
+  featuredListingIds?: string;
+  featuredListings?: Vehicle[];
 }
 
 export interface Vehicle {

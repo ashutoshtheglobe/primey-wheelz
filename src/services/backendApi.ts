@@ -167,6 +167,8 @@ function mapBackendListingToVehicle(item: BackendListing): Vehicle {
   };
 }
 
+const inFlightUser883Requests = new Map<string, Promise<BackendListingsResponse>>();
+
 /**
  * Fetches user 883 listings dynamically from backend GraphQL
  */
@@ -176,7 +178,13 @@ export async function fetchUser883Listings(
   perPage: number = 12,
   keyword: string = ""
 ): Promise<BackendListingsResponse> {
-  const query = `
+  const cacheKey = `${userId}_${page}_${perPage}_${keyword}`;
+  if (inFlightUser883Requests.has(cacheKey)) {
+    return inFlightUser883Requests.get(cacheKey)!;
+  }
+
+  const fetchPromise = (async (): Promise<BackendListingsResponse> => {
+    const query = `
     query FetchUserListing($userId: Int!, $keyword: String, $page: Int, $perPage: Int) {
       fetchUserListing(userId: $userId, keyword: $keyword, page: $page, perPage: $perPage) {
         listings {
@@ -220,44 +228,50 @@ export async function fetchUser883Listings(
     }
   `;
 
-  try {
-    const res = await fetch(BACKEND_PUBLIC_GRAPHQL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify({
-        query,
-        variables: { userId: Number(userId), keyword: keyword || null, page, perPage }
-      }),
-      cache: "no-store",
-    });
+    try {
+      const res = await fetch(BACKEND_PUBLIC_GRAPHQL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          variables: { userId: Number(userId), keyword: keyword || null, page, perPage }
+        }),
+        cache: "no-store",
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      const resultData = data?.data?.fetchUserListing;
+      if (res.ok) {
+        const data = await res.json();
+        const resultData = data?.data?.fetchUserListing;
 
-      if (resultData && resultData.listings) {
-        const mappedVehicles = resultData.listings.map(mapBackendListingToVehicle);
-        return {
-          listings: mappedVehicles,
-          total: resultData.pagination?.total || mappedVehicles.length,
-          totalPages: resultData.pagination?.totalPages || 1,
-          currentPage: resultData.pagination?.currentPage || page
-        };
+        if (resultData && resultData.listings) {
+          const mappedVehicles = resultData.listings.map(mapBackendListingToVehicle);
+          return {
+            listings: mappedVehicles,
+            total: resultData.pagination?.total || mappedVehicles.length,
+            totalPages: resultData.pagination?.totalPages || 1,
+            currentPage: resultData.pagination?.currentPage || page
+          };
+        }
       }
+    } catch (error) {
+      console.warn("Error fetching live listings from backend:", error);
+    } finally {
+      inFlightUser883Requests.delete(cacheKey);
     }
-  } catch (error) {
-    console.warn("Error fetching live listings from backend:", error);
-  }
 
-  return {
-    listings: [],
-    total: 0,
-    totalPages: 1,
-    currentPage: 1
-  };
+    return {
+      listings: [],
+      total: 0,
+      totalPages: 1,
+      currentPage: 1
+    };
+  })();
+
+  inFlightUser883Requests.set(cacheKey, fetchPromise);
+  return fetchPromise;
 }
 
 /**
@@ -295,6 +309,38 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promis
         openingHours
         metaDescription
         status
+        featuredListingIds
+        featuredListings {
+          id
+          title
+          description
+          basePrice
+          listPrice
+          salePrice
+          saleMethod
+          enquiriesOverPrice
+          weeklyAuction
+          runAuction
+          createdAt
+          listingMedia {
+            fieldName
+            fileName
+            filePath
+          }
+          listingAttributeOptions {
+            id
+            value
+            listingAttribute {
+              id
+              name
+            }
+          }
+          location {
+            address
+            city
+            state
+          }
+        }
       }
     }
   `;
@@ -318,6 +364,10 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promis
       const result = await res.json();
       const site = result?.data?.getCurrentWebsite;
       if (site) {
+        const mappedFeaturedListings = site.featuredListings && Array.isArray(site.featuredListings)
+          ? site.featuredListings.map(mapBackendListingToVehicle)
+          : undefined;
+
         return {
           id: site.id,
           companyName: site.companyName || "",
@@ -346,7 +396,9 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promis
           poweredBy: site.poweredBy || "",
           openingHours: site.openingHours ? site.openingHours.split("\n") : [],
           metaDescription: site.metaDescription,
-          status: site.status
+          status: site.status,
+          featuredListingIds: site.featuredListingIds,
+          featuredListings: mappedFeaturedListings
         };
       }
     }

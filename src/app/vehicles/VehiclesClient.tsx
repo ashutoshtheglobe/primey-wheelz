@@ -19,19 +19,34 @@ export default function VehiclesPage() {
   const [favCount, setFavCount] = useState<number>(0);
   const [favIds, setFavIds] = useState<string[]>([]);
   const [cardsVisible, setCardsVisible] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const perPage = 10;
 
   useEffect(() => {
+    let isMounted = true;
     async function loadData() {
       setLoading(true);
       setCardsVisible(false);
-      const response = await fetchUser883Listings(883, 1, 36, searchQuery);
-      setVehicles(response.listings);
-      setTotalCount(response.total);
-      setLoading(false);
-      setTimeout(() => setCardsVisible(true), 50);
+      const response = await fetchUser883Listings(883, currentPage, perPage, searchQuery);
+      if (isMounted) {
+        setVehicles(response.listings);
+        setTotalCount(response.total);
+        setTotalPages(response.totalPages);
+        setLoading(false);
+        setTimeout(() => {
+          if (isMounted) setCardsVisible(true);
+        }, 50);
+      }
     }
     loadData();
 
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPage, perPage, searchQuery]);
+
+  useEffect(() => {
     const updateFavs = () => {
       const favs = getFavourites();
       setFavCount(favs.length);
@@ -49,7 +64,7 @@ export default function VehiclesPage() {
 
     window.addEventListener("favouritesUpdated", updateFavs);
     return () => window.removeEventListener("favouritesUpdated", updateFavs);
-  }, [searchQuery]);
+  }, []);
 
   const makes = ["All", ...Array.from(new Set(vehicles.map((v) => v.make)))];
   const bodyStyles = ["All", ...Array.from(new Set(vehicles.map((v) => v.bodyStyle)))];
@@ -110,13 +125,19 @@ export default function VehiclesPage() {
               type="text"
               placeholder="Search by make, model or keyword..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full bg-transparent border-none px-4 py-3 text-white text-sm md:text-base placeholder-gray-500 focus:outline-none"
             />
 
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery("")}
+                onClick={() => {
+                  setSearchQuery("");
+                  setCurrentPage(1);
+                }}
                 className="px-3 text-gray-400 hover:text-white transition"
                 title="Clear search"
               >
@@ -350,6 +371,71 @@ export default function VehiclesPage() {
                 </Link>
               );
             })}
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {totalPages > 1 && (
+          <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+            <div className="text-xs text-gray-400 font-mono">
+              Page <span className="text-white font-bold">{currentPage}</span> of{" "}
+              <span className="text-white font-bold">{totalPages}</span> ({totalCount} total listings)
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (currentPage > 1) {
+                    setCurrentPage((prev) => prev - 1);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }
+                }}
+                disabled={currentPage === 1 || loading}
+                className="px-4 py-2 bg-zinc-800 border border-zinc-700 text-white text-xs font-mono rounded-lg hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                &larr; Previous
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                  .map((p, idx, arr) => {
+                    const prevPage = arr[idx - 1];
+                    const showEllipsis = prevPage && p - prevPage > 1;
+                    return (
+                      <React.Fragment key={p}>
+                        {showEllipsis && <span className="px-1 text-gray-500 text-xs">...</span>}
+                        <button
+                          onClick={() => {
+                            setCurrentPage(p);
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          }}
+                          className={`w-8 h-8 rounded-lg text-xs font-mono transition ${
+                            currentPage === p
+                              ? "bg-[#C2410C] text-white font-bold"
+                              : "bg-zinc-800 text-gray-300 hover:text-white hover:bg-zinc-700"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+              </div>
+
+              <button
+                onClick={() => {
+                  if (currentPage < totalPages) {
+                    setCurrentPage((prev) => prev + 1);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }
+                }}
+                disabled={currentPage === totalPages || loading}
+                className="px-4 py-2 bg-zinc-800 border border-zinc-700 text-white text-xs font-mono rounded-lg hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Next &rarr;
+              </button>
+            </div>
           </div>
         )}
       </div>

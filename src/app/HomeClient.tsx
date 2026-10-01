@@ -39,13 +39,19 @@ export default function Home() {
   useEffect(() => {
     async function loadBackendData() {
       setLoadingListings(true);
-      const listingsData = await fetchUser883Listings(883, 1, 3);
-      setFeaturedVehicles(listingsData.listings);
-      setTotalVehicles(listingsData.total);
-      setLoadingListings(false);
+      if (site?.featuredListings && site.featuredListings.length > 0) {
+        setFeaturedVehicles(site.featuredListings.slice(0, 3));
+        setTotalVehicles(site.featuredListings.length);
+        setLoadingListings(false);
+      } else {
+        const listingsData = await fetchUser883Listings(883, 1, 3);
+        setFeaturedVehicles(listingsData.listings);
+        setTotalVehicles(listingsData.total);
+        setLoadingListings(false);
+      }
     }
     loadBackendData();
-  }, []);
+  }, [site]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
