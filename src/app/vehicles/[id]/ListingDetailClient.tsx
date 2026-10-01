@@ -99,6 +99,25 @@ export default function ListingDetailPage({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Keyboard navigation listener for Lightbox gallery modal
+  useEffect(() => {
+    if (!showLightbox || !listing) return;
+    const galleryImages = getListingImageUrls(listing);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowLightbox(false);
+      } else if (e.key === "ArrowLeft") {
+        setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1));
+      } else if (e.key === "ArrowRight") {
+        setActiveImageIndex((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showLightbox, listing]);
+
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -408,92 +427,103 @@ export default function ListingDetailPage({
           </div>
         </div>
 
-        {/* Hero Gallery Grid Section */}
-        <div ref={heroRef} className="grid lg:grid-cols-3 gap-4 mb-8">
-          {/* Main Hero Photo Container (Spans 2 columns) */}
-          <div className="lg:col-span-2 relative aspect-[16/10] bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 group select-none">
-            <img
-              src={currentImage}
-              alt={listing.title}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-102 cursor-pointer"
-              onClick={() => setShowLightbox(true)}
-            />
+        {/* Hero Gallery Section */}
+        <div ref={heroRef} className="mb-8 select-none">
+          {/* Desktop/Laptop 3-Column Layout & Mobile Container */}
+          <div className="grid lg:grid-cols-3 gap-4 mb-2 lg:mb-8">
+            {/* Main Hero Photo Container (Spans 2 columns on desktop/laptop) */}
+            <div className="lg:col-span-2 relative aspect-[16/10] bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 group cursor-pointer">
+              <img
+                src={currentImage}
+                alt={listing.title}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                onClick={() => setShowLightbox(true)}
+              />
 
-            {/* Badges Overlay (Top Left) */}
-            <div className="absolute top-4 left-4 flex flex-wrap gap-2 z-10">
-              <span className="bg-[#C2410C] text-white text-xs font-mono font-extrabold uppercase px-3 py-1 rounded-full shadow-lg">
-                {listing.status || "Active"}
-              </span>
-              <span className="bg-zinc-900/90 text-zinc-300 border border-zinc-700 text-xs font-mono font-semibold uppercase px-3 py-1 rounded-full backdrop-blur-md">
-                {saleMethodDetails.label}
-              </span>
-              {crashStars !== "N/A" && (
-                <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold px-3 py-1 rounded-full backdrop-blur-md">
-                  ★ {crashStars} Stars Safety
+              {/* Badges Overlay (Top Left) */}
+              <div className="absolute top-4 left-4 flex flex-wrap gap-2 z-10 pointer-events-none">
+                <span className="bg-[#C2410C] text-white text-xs font-mono font-extrabold uppercase px-3 py-1 rounded-full shadow-lg">
+                  {listing.status || "Active"}
                 </span>
+                <span className="bg-zinc-900/90 text-zinc-300 border border-zinc-700 text-xs font-mono font-semibold uppercase px-3 py-1 rounded-full backdrop-blur-md">
+                  {saleMethodDetails.label}
+                </span>
+                {crashStars !== "N/A" && (
+                  <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold px-3 py-1 rounded-full backdrop-blur-md">
+                    ★ {crashStars} Stars Safety
+                  </span>
+                )}
+              </div>
+
+              {/* Photo Count Pill Badge (Top Right) */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowLightbox(true);
+                }}
+                className="absolute top-4 right-4 bg-black/75 hover:bg-black text-white text-xs md:text-sm font-sans font-bold px-3.5 py-1.5 rounded-2xl backdrop-blur-md border border-white/20 shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2 z-10 cursor-pointer"
+              >
+                <svg className="w-4 h-4 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>{images.length}</span>
+              </button>
+            </div>
+
+            {/* Desktop / Laptop Right Side-Stacked Thumbnails (Visible on lg/big screen) */}
+            <div className="hidden lg:grid grid-rows-2 gap-4 h-full">
+              {images.slice(1, 3).map((imgUrl, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    setActiveImageIndex(idx + 1);
+                    setShowLightbox(true);
+                  }}
+                  className={`relative aspect-[16/10] lg:aspect-auto h-full bg-zinc-900 rounded-2xl overflow-hidden border transition cursor-pointer group ${
+                    activeImageIndex === idx + 1 ? "border-[#C2410C] ring-2 ring-[#C2410C]/50" : "border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`Thumbnail ${idx + 1}`}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                </div>
+              ))}
+              {images.length <= 1 && (
+                <div className="relative h-full bg-zinc-900/50 rounded-2xl border border-zinc-800/80 flex items-center justify-center text-zinc-600 font-mono text-xs uppercase p-6 text-center">
+                  High Quality Vehicle Gallery
+                </div>
               )}
             </div>
+          </div>
 
-            {/* Photo Count Badge (Top Right) */}
-            <button
-              onClick={() => setShowLightbox(true)}
-              className="absolute top-4 right-4 bg-zinc-950/80 hover:bg-black text-white text-xs font-mono font-bold px-3.5 py-1.5 rounded-full backdrop-blur-md border border-zinc-700 shadow-xl transition flex items-center gap-1.5 z-10"
-            >
-              <span>📷</span> {images.length} Photos
-            </button>
-
-            {/* View Fullscreen overlay prompt */}
-            <div
-              onClick={() => setShowLightbox(true)}
-              className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-            >
-              <span className="bg-black/80 text-white text-xs font-mono uppercase tracking-widest px-4 py-2 rounded-lg border border-zinc-700">
-                Click to expand gallery 🔍
-              </span>
+          {/* Mobile Only: 2 Side-by-Side Images Below Main Photo (Hidden on lg/big screen) */}
+          {images.length > 1 && (
+            <div className="grid grid-cols-2 gap-2 lg:hidden mb-6">
+              {images.slice(1, 3).map((imgUrl, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    setActiveImageIndex(idx + 1);
+                    setShowLightbox(true);
+                  }}
+                  className="relative aspect-[16/10] bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 cursor-pointer group"
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`Detail view ${idx + 1}`}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
+                </div>
+              ))}
             </div>
-          </div>
+          )}
 
-          {/* Side Stacked Thumbnails (Desktop Right Column Only) */}
-          <div className="hidden lg:grid grid-rows-2 gap-4 h-full">
-            {images.slice(1, 3).map((imgUrl, idx) => (
-              <div
-                key={idx}
-                onClick={() => setActiveImageIndex(idx + 1)}
-                className={`relative aspect-[16/10] lg:aspect-auto h-full bg-zinc-900 rounded-2xl overflow-hidden border transition cursor-pointer group ${
-                  activeImageIndex === idx + 1 ? "border-[#C2410C] ring-2 ring-[#C2410C]/50" : "border-zinc-800 hover:border-zinc-700"
-                }`}
-              >
-                <img
-                  src={imgUrl}
-                  alt={`Thumbnail ${idx + 1}`}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-              </div>
-            ))}
-            {images.length <= 1 && (
-              <div className="relative h-full bg-zinc-900/50 rounded-2xl border border-zinc-800/80 flex items-center justify-center text-zinc-600 font-mono text-xs uppercase p-6 text-center">
-                High Quality Vehicle Gallery
-              </div>
-            )}
-          </div>
+
         </div>
-
-        {/* Horizontal Thumbnail Selector Row */}
-        {images.length > 1 && (
-          <div className="flex items-center gap-3 overflow-x-auto pb-4 mb-8 scrollbar-thin">
-            {images.map((img, idx) => (
-              <button
-                key={idx}
-                onClick={() => setActiveImageIndex(idx)}
-                className={`flex-shrink-0 w-24 h-16 rounded-xl overflow-hidden border-2 transition ${
-                  activeImageIndex === idx ? "border-[#C2410C] scale-105" : "border-zinc-800 opacity-60 hover:opacity-100"
-                }`}
-              >
-                <img src={img} alt={`Thumb ${idx}`} className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Main Content Layout (Left Details + Right Sticky Card) */}
         <div className="grid lg:grid-cols-3 gap-8">
@@ -1072,46 +1102,112 @@ export default function ListingDetailPage({
         </div>
       </div>
 
-      {/* LIGHTBOX GALLERY MODAL */}
+      {/* LIGHTBOX GALLERY MODAL (Matching Image 2: Dark full-screen, top bar with 1/18 counter, fullscreen/download/close icons, side arrows, bottom thumbnail strip) */}
       {showLightbox && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-fadeIn">
-          <button
-            onClick={() => setShowLightbox(false)}
-            className="absolute top-6 right-6 text-white text-3xl font-mono hover:text-[#C2410C] transition z-50"
-          >
-            &times;
-          </button>
+        <div className="fixed inset-0 bg-black z-50 flex flex-col justify-between select-none animate-fadeIn">
+          {/* Top Bar Controls */}
+          <div className="flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-md z-50 border-b border-white/10">
+            {/* Left side counter (e.g. 1 / 18) */}
+            <div className="text-white text-sm font-sans font-medium tracking-wide">
+              {activeImageIndex + 1} / {images.length}
+            </div>
 
-          <div className="relative max-w-5xl w-full max-h-[85vh] flex flex-col items-center">
+            {/* Right side icon action buttons */}
+            <div className="flex items-center gap-4 text-gray-300">
+              {/* Fullscreen toggle icon */}
+              <button
+                onClick={() => {
+                  if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                  } else {
+                    document.exitFullscreen().catch(() => {});
+                  }
+                }}
+                className="p-2 hover:text-white transition rounded-lg hover:bg-white/10"
+                title="Toggle Fullscreen"
+              >
+                <svg className="w-5 h-5 stroke-current stroke-2 fill-none" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              </button>
+
+              {/* Download image button */}
+              <a
+                href={currentImage}
+                download={`vehicle-${listing.id}-photo-${activeImageIndex + 1}.jpg`}
+                target="_blank"
+                rel="noreferrer"
+                className="p-2 hover:text-white transition rounded-lg hover:bg-white/10"
+                title="Download Image"
+              >
+                <svg className="w-5 h-5 stroke-current stroke-2 fill-none" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </a>
+
+              {/* Close button (X) */}
+              <button
+                onClick={() => setShowLightbox(false)}
+                className="p-2 hover:text-white transition rounded-lg hover:bg-white/10 text-xl font-bold leading-none"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Center Image View with Side Nav Arrows */}
+          <div className="relative flex-1 flex items-center justify-center p-4 min-h-0 overflow-hidden">
+            {/* Left Arrow Button */}
+            <button
+              onClick={() =>
+                setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1))
+              }
+              className="absolute left-4 z-20 p-3.5 rounded-md bg-white/20 hover:bg-white/40 backdrop-blur-md text-white transition transform hover:scale-110 shadow-2xl"
+              title="Previous Photo"
+            >
+              <svg className="w-6 h-6 stroke-current stroke-2 fill-none" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            {/* Active Image */}
             <img
               src={currentImage}
-              alt="Gallery View"
-              className="max-h-[75vh] w-auto object-contain rounded-xl shadow-2xl border border-zinc-800"
+              alt={`Vehicle photo ${activeImageIndex + 1}`}
+              className="max-h-full max-w-full object-contain transition-all duration-300 shadow-2xl rounded"
             />
 
-            {/* Lightbox Controls */}
-            <div className="flex items-center justify-between w-full mt-4 max-w-xl">
-              <button
-                onClick={() =>
-                  setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1))
-                }
-                className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-white rounded-lg hover:bg-zinc-800 text-xs font-mono uppercase"
-              >
-                &larr; Previous
-              </button>
+            {/* Right Arrow Button */}
+            <button
+              onClick={() =>
+                setActiveImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0))
+              }
+              className="absolute right-4 z-20 p-3.5 rounded-md bg-white/20 hover:bg-white/40 backdrop-blur-md text-white transition transform hover:scale-110 shadow-2xl"
+              title="Next Photo"
+            >
+              <svg className="w-6 h-6 stroke-current stroke-2 fill-none" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
 
-              <span className="text-xs font-mono text-gray-400">
-                {activeImageIndex + 1} of {images.length}
-              </span>
-
-              <button
-                onClick={() =>
-                  setActiveImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0))
-                }
-                className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-white rounded-lg hover:bg-zinc-800 text-xs font-mono uppercase"
-              >
-                Next &rarr;
-              </button>
+          {/* Bottom Thumbnail Selector Strip (Matching Image 2 bottom row) */}
+          <div className="bg-black/90 px-4 py-3 border-t border-white/10 overflow-x-auto flex items-center justify-center gap-2 scrollbar-none z-50">
+            <div className="flex items-center gap-2 mx-auto max-w-full">
+              {images.map((img, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveImageIndex(idx)}
+                  className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded border-2 overflow-hidden transition-all duration-200 ${
+                    activeImageIndex === idx
+                      ? "border-white opacity-100 scale-105 ring-2 ring-white/50"
+                      : "border-transparent opacity-50 hover:opacity-80"
+                  }`}
+                >
+                  <img src={img} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
             </div>
           </div>
         </div>
