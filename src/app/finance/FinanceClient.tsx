@@ -87,19 +87,6 @@ export default function FinanceClient() {
         otherIncome2: "",
         otherIncomeSource2: "",
       },
-      expenses: {
-        rentAmount: "",
-        rentFrequency: "",
-      },
-      loanRepayments: [
-        { type: "", amount: "", frequency: "", owedTo: "" },
-        { type: "", amount: "", frequency: "", owedTo: "" },
-        { type: "", amount: "", frequency: "", owedTo: "" },
-      ],
-      assets: [
-        { description: "" },
-        { description: "" },
-      ],
     },
 
     // Step 4: Apply
@@ -107,7 +94,6 @@ export default function FinanceClient() {
       name: "",
       relationship: "",
       phone: "",
-      creditRating: "",
     },
   });
 
@@ -170,25 +156,11 @@ export default function FinanceClient() {
           otherIncome2: "",
           otherIncomeSource2: "",
         },
-        expenses: {
-          rentAmount: "",
-          rentFrequency: "",
-        },
-        loanRepayments: [
-          { type: "", amount: "", frequency: "", owedTo: "" },
-          { type: "", amount: "", frequency: "", owedTo: "" },
-          { type: "", amount: "", frequency: "", owedTo: "" },
-        ],
-        assets: [
-          { description: "" },
-          { description: "" },
-        ],
       },
       nextOfKin: {
         name: "",
         relationship: "",
         phone: "",
-        creditRating: "",
       },
     });
     setSupportingFiles([]);
@@ -328,10 +300,6 @@ export default function FinanceClient() {
       if (!inc.primaryIncomeType) errs.primaryIncomeType = true;
       if (!inc.amount) errs.amount = true;
 
-      const exp = f.financials.expenses;
-      if (!exp.rentAmount) errs.rentAmount = true;
-      if (!exp.rentFrequency) errs.rentFrequency = true;
-
       setErrors(errs);
       return Object.keys(errs).length === 0;
     }
@@ -440,12 +408,6 @@ export default function FinanceClient() {
   const submitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-
-    if (!form.nextOfKin.creditRating) {
-      setErrors((prev) => ({ ...prev, creditRating: true }));
-      showToast("Please provide your credit rating.", "error");
-      return;
-    }
 
     setIsSubmitting(true);
 
@@ -1610,212 +1572,9 @@ export default function FinanceClient() {
                       </div>
                     </div>
                   </div>
-
-                  {/* Outgoings / Expenses Section */}
-                  <div>
-                    <h3 className="text-xl font-medium border-b border-white/10 pb-3 mb-6" style={{ color: secondaryColor }}>
-                      Outgoings (Expenses &amp; Repayments)
-                    </h3>
-                    <h4 className="text-sm font-semibold text-gray-300 mb-4">Rent Details</h4>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="flex flex-col">
-                        <label className="text-xs text-gray-400 mb-1 font-semibold uppercase tracking-wider">
-                          Rent Amount <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative flex items-center">
-                          <span className="absolute left-3 text-gray-400 font-bold">$</span>
-                          <input
-                            type="text"
-                            value={form.financials.expenses.rentAmount}
-                            onChange={(e) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                financials: {
-                                  ...prev.financials,
-                                  expenses: {
-                                    ...prev.financials.expenses,
-                                    rentAmount: e.target.value,
-                                  },
-                                },
-                              }))
-                            }
-                            className={`w-full bg-neutral-900 border ${
-                              errors.rentAmount ? "border-red-500" : "border-white/10"
-                            } rounded-lg py-3 pl-8 pr-12 text-white focus:outline-none focus:border-white transition-all duration-200`}
-                          />
-                          <span className="absolute right-3 text-gray-400 font-bold text-sm">.00</span>
-                        </div>
-                        {renderErrorMessage("rentAmount")}
-                      </div>
-
-                      <div className="flex flex-col">
-                        <label className="text-xs text-gray-400 mb-1 font-semibold uppercase tracking-wider">
-                          Frequency <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={form.financials.expenses.rentFrequency}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              financials: {
-                                ...prev.financials,
-                                expenses: {
-                                  ...prev.financials.expenses,
-                                  rentFrequency: e.target.value,
-                                },
-                              },
-                            }))
-                          }
-                          className={`w-full bg-neutral-900 border ${
-                            errors.rentFrequency ? "border-red-500" : "border-white/10"
-                          } rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200`}
-                        >
-                          <option value="">Please select...</option>
-                          <option value="weekly">Weekly</option>
-                          <option value="fortnightly">Fortnightly</option>
-                          <option value="monthly">Monthly</option>
-                          <option value="other">Other</option>
-                        </select>
-                        {renderErrorMessage("rentFrequency")}
-                      </div>
-                    </div>
-
-                    {/* Loan Repayments Loop */}
-                    <div className="mt-8">
-                      <h4 className="text-sm font-semibold text-gray-300 mb-4 border-b border-white/5 pb-2">
-                        Loan Repayments
-                      </h4>
-                      {form.financials.loanRepayments.map((loan, i) => (
-                        <div
-                          key={i}
-                          className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4 bg-neutral-900/30 p-4 rounded-xl border border-white/5"
-                        >
-                          <div className="flex flex-col">
-                            <label className="text-[10px] text-gray-500 mb-1 uppercase font-bold tracking-wider">
-                              Loan {i + 1} Type
-                            </label>
-                            <select
-                              value={loan.type}
-                              onChange={(e) => {
-                                const newLoans = [...form.financials.loanRepayments];
-                                newLoans[i].type = e.target.value;
-                                setForm((prev) => ({
-                                  ...prev,
-                                  financials: { ...prev.financials, loanRepayments: newLoans },
-                                }));
-                              }}
-                              className="w-full bg-neutral-900 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200"
-                            >
-                              <option value="">Please select...</option>
-                              <option value="loan">Loan</option>
-                              <option value="hire_purchase">Hire Purchase</option>
-                              <option value="credit_card">Credit Card</option>
-                              <option value="other">Other</option>
-                            </select>
-                          </div>
-
-                          <div className="flex flex-col">
-                            <label className="text-[10px] text-gray-500 mb-1 uppercase font-bold tracking-wider">
-                              Repayment Amount
-                            </label>
-                            <div className="relative flex items-center">
-                              <span className="absolute left-3 text-gray-400 font-bold">$</span>
-                              <input
-                                type="text"
-                                value={loan.amount}
-                                onChange={(e) => {
-                                  const newLoans = [...form.financials.loanRepayments];
-                                  newLoans[i].amount = e.target.value;
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    financials: { ...prev.financials, loanRepayments: newLoans },
-                                  }));
-                                }}
-                                className="w-full bg-neutral-900 border border-white/10 rounded-lg py-3 pl-8 pr-12 text-white focus:outline-none focus:border-white transition-all duration-200"
-                              />
-                              <span className="absolute right-3 text-gray-400 font-bold text-sm">.00</span>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col">
-                            <label className="text-[10px] text-gray-500 mb-1 uppercase font-bold tracking-wider">
-                              Frequency
-                            </label>
-                            <select
-                              value={loan.frequency}
-                              onChange={(e) => {
-                                const newLoans = [...form.financials.loanRepayments];
-                                newLoans[i].frequency = e.target.value;
-                                setForm((prev) => ({
-                                  ...prev,
-                                  financials: { ...prev.financials, loanRepayments: newLoans },
-                                }));
-                              }}
-                              className="w-full bg-neutral-900 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200"
-                            >
-                              <option value="">Please select...</option>
-                              <option value="weekly">Weekly</option>
-                              <option value="fortnightly">Fortnightly</option>
-                              <option value="monthly">Monthly</option>
-                              <option value="other">Other</option>
-                            </select>
-                          </div>
-
-                          <div className="flex flex-col">
-                            <label className="text-[10px] text-gray-500 mb-1 uppercase font-bold tracking-wider">
-                              Owed To
-                            </label>
-                            <input
-                              type="text"
-                              value={loan.owedTo}
-                              onChange={(e) => {
-                                const newLoans = [...form.financials.loanRepayments];
-                                newLoans[i].owedTo = e.target.value;
-                                setForm((prev) => ({
-                                  ...prev,
-                                  financials: { ...prev.financials, loanRepayments: newLoans },
-                                }));
-                              }}
-                              className="w-full bg-neutral-900 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Assets Section */}
-                  <div>
-                    <h3 className="text-xl font-medium border-b border-white/10 pb-3 mb-6" style={{ color: secondaryColor }}>
-                      Assets
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {form.financials.assets.map((asset, i) => (
-                        <div key={i} className="flex flex-col bg-neutral-900/30 p-4 rounded-xl border border-white/5">
-                          <label className="text-xs text-gray-400 mb-1 font-semibold uppercase tracking-wider">
-                            Asset {i + 1} Description
-                          </label>
-                          <input
-                            type="text"
-                            value={asset.description}
-                            onChange={(e) => {
-                              const newAssets = [...form.financials.assets];
-                              newAssets[i].description = e.target.value;
-                              setForm((prev) => ({
-                                ...prev,
-                                financials: { ...prev.financials, assets: newAssets },
-                              }));
-                            }}
-                            placeholder="e.g. Savings, Vehicle value, Property..."
-                            className="w-full bg-neutral-900 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               )}
+
 
               {/* STEP 4: APPLY */}
               {currentStep === 4 && (
@@ -1877,35 +1636,8 @@ export default function FinanceClient() {
                         />
                       </div>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                      <div className="flex flex-col">
-                        <label className="text-xs text-gray-400 mb-1 font-semibold uppercase tracking-wider">
-                          Rate your credit <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={form.nextOfKin.creditRating}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              nextOfKin: { ...prev.nextOfKin, creditRating: e.target.value },
-                            }))
-                          }
-                          className={`w-full bg-neutral-900 border ${
-                            errors.creditRating ? "border-red-500" : "border-white/10"
-                          } rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200`}
-                        >
-                          <option value="">Please select...</option>
-                          <option value="poor">Poor</option>
-                          <option value="fair">Fair</option>
-                          <option value="good">Good</option>
-                          <option value="excellent">Excellent</option>
-                          <option value="unknown">Unknown</option>
-                        </select>
-                        {renderErrorMessage("creditRating")}
-                      </div>
-                    </div>
                   </div>
+
 
                   {/* Supporting Documents */}
                   <div>
