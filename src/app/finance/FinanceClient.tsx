@@ -257,8 +257,6 @@ export default function FinanceClient() {
 
       if (!f.maritalStatus) errs.maritalStatus = true;
       if (!f.dependants) errs.dependants = true;
-      if (!f.licenseType) errs.licenseType = true;
-      if (!f.licenseNumber) errs.licenseNumber = true;
 
       if (f.expiryDate) {
         const expRes = isValidExpiryDate(f.expiryDate);
@@ -804,14 +802,12 @@ export default function FinanceClient() {
 
                       <div className="flex flex-col">
                         <label className="text-xs text-gray-400 mb-1 font-semibold uppercase tracking-wider">
-                          Drivers Licence Type <span className="text-red-500">*</span>
+                          Drivers Licence Type
                         </label>
                         <select
                           value={form.licenseType}
                           onChange={(e) => setForm((prev) => ({ ...prev, licenseType: e.target.value }))}
-                          className={`w-full bg-neutral-900 border ${
-                            errors.licenseType ? "border-red-500" : "border-white/10"
-                          } rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200`}
+                          className="w-full bg-neutral-900 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200"
                         >
                           <option value="">Please select...</option>
                           <option value="learner">Learner License</option>
@@ -819,22 +815,18 @@ export default function FinanceClient() {
                           <option value="full">Full License</option>
                           <option value="overseas">Overseas</option>
                         </select>
-                        {renderErrorMessage("licenseType")}
                       </div>
 
                       <div className="flex flex-col">
                         <label className="text-xs text-gray-400 mb-1 font-semibold uppercase tracking-wider">
-                          Drivers Licence No. <span className="text-red-500">*</span>
+                          Drivers Licence No.
                         </label>
                         <input
                           type="text"
                           value={form.licenseNumber}
                           onChange={(e) => setForm((prev) => ({ ...prev, licenseNumber: e.target.value }))}
-                          className={`w-full bg-neutral-900 border ${
-                            errors.licenseNumber ? "border-red-500" : "border-white/10"
-                          } rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200`}
+                          className="w-full bg-neutral-900 border border-white/10 rounded-lg p-3 text-white focus:outline-none focus:border-white transition-all duration-200"
                         />
-                        {renderErrorMessage("licenseNumber")}
                       </div>
 
                       <div className="flex flex-col">
