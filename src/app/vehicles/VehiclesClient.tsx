@@ -104,11 +104,7 @@ export default function VehiclesPage() {
         {/* Page Title Header (e.g. "Ute listings for sale" matching screenshot) */}
         <div className="mb-6">
           <h1 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tight font-sans">
-            {selectedBody !== "All"
-              ? `${selectedBody} listings for sale`
-              : selectedMake !== "All"
-              ? `${selectedMake} listings for sale`
-              : "Showroom listings for sale"}
+            Total Showroom listings for sale ({totalCount})
           </h1>
         </div>
 
