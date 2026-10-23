@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import {
   fetchListingById,
   fetchWebsiteConfig,
+  fetchUser883Listings,
   getListingImageUrls,
 } from "@/services/backendApi";
 import ListingDetailClient from "./ListingDetailClient";
@@ -94,10 +95,23 @@ export async function generateMetadata({
   };
 }
 
-export default function ListingDetailPage({
+export default async function ListingDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  return <ListingDetailClient params={params} />;
+  const resolvedParams = await params;
+  const listingId = resolvedParams.id;
+  const [data, recentData] = await Promise.all([
+    fetchListingById(listingId),
+    fetchUser883Listings(883, 1, 4),
+  ]);
+
+  return (
+    <ListingDetailClient
+      params={params}
+      initialListingData={data}
+      initialSimilarVehicles={recentData.listings.filter((v) => String(v.id) !== String(listingId))}
+    />
+  );
 }

@@ -192,7 +192,25 @@ function mapBackendListingToVehicle(item: BackendListing): Vehicle {
   };
 }
 
+// In-memory cache structures for lightning-fast sub-millisecond response times
+type NextFetchRequestInit = RequestInit & { next?: { revalidate?: number | false; tags?: string[] } };
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const listingsMemoryCache = new Map<string, CacheEntry<BackendListingsResponse>>();
+const websiteConfigMemoryCache = new Map<string, CacheEntry<WebsiteData | null>>();
+const listingDetailsMemoryCache = new Map<string, CacheEntry<GetListingResult | null>>();
+
 const inFlightUser883Requests = new Map<string, Promise<BackendListingsResponse>>();
+const inFlightWebsiteConfigRequests = new Map<string, Promise<WebsiteData | null>>();
+const inFlightListingDetailsRequests = new Map<string, Promise<GetListingResult | null>>();
+
+const LISTINGS_CACHE_TTL_MS = 60 * 1000; // 1 minute
+const CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const LISTING_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
 /**
  * Fetches user 883 listings dynamically from backend GraphQL
@@ -203,7 +221,16 @@ export async function fetchUser883Listings(
   perPage: number = 12,
   keyword: string = ""
 ): Promise<BackendListingsResponse> {
-  const cacheKey = `${userId}_${page}_${perPage}_${keyword}`;
+  const cacheKey = `${userId}_${page}_${perPage}_${keyword.trim().toLowerCase()}`;
+
+  // 1. Check in-memory cache for instant 0ms return
+  const cached = listingsMemoryCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < LISTINGS_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  // 2. Reuse ongoing in-flight request to prevent duplicate remote queries
   if (inFlightUser883Requests.has(cacheKey)) {
     return inFlightUser883Requests.get(cacheKey)!;
   }
@@ -254,7 +281,7 @@ export async function fetchUser883Listings(
   `;
 
     try {
-      const res = await fetch(BACKEND_PUBLIC_GRAPHQL, {
+      const fetchOptions: NextFetchRequestInit = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -264,8 +291,13 @@ export async function fetchUser883Listings(
           query,
           variables: { userId: Number(userId), keyword: keyword || null, page, perPage }
         }),
-        cache: "no-store",
-      });
+      };
+
+      if (typeof window === "undefined") {
+        fetchOptions.next = { revalidate: 60 };
+      }
+
+      const res = await fetch(BACKEND_PUBLIC_GRAPHQL, fetchOptions);
 
       if (res.ok) {
         const data = await res.json();
@@ -273,18 +305,24 @@ export async function fetchUser883Listings(
 
         if (resultData && resultData.listings) {
           const mappedVehicles = resultData.listings.map(mapBackendListingToVehicle);
-          return {
+          const responsePayload: BackendListingsResponse = {
             listings: mappedVehicles,
             total: resultData.pagination?.total || mappedVehicles.length,
             totalPages: resultData.pagination?.totalPages || 1,
             currentPage: resultData.pagination?.currentPage || page
           };
+          listingsMemoryCache.set(cacheKey, { data: responsePayload, timestamp: Date.now() });
+          return responsePayload;
         }
       }
     } catch (error) {
       console.warn("Error fetching live listings from backend:", error);
     } finally {
       inFlightUser883Requests.delete(cacheKey);
+    }
+
+    if (cached) {
+      return cached.data;
     }
 
     return {
@@ -303,7 +341,22 @@ export async function fetchUser883Listings(
  * Executes `GetCurrentWebsite` query with variables `{ slug: "primey-wheelz" }`
  */
 export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promise<WebsiteData | null> {
-  const query = `
+  const cacheKey = slug.trim().toLowerCase();
+
+  // 1. Check in-memory cache for instant 0ms return
+  const cached = websiteConfigMemoryCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < CONFIG_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  // 2. Reuse ongoing in-flight request
+  if (inFlightWebsiteConfigRequests.has(cacheKey)) {
+    return inFlightWebsiteConfigRequests.get(cacheKey)!;
+  }
+
+  const fetchPromise = (async (): Promise<WebsiteData | null> => {
+    const query = `
     query GetCurrentWebsite($slug: String) {
       getCurrentWebsite(slug: $slug) {
         id
@@ -370,68 +423,86 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promis
     }
   `;
 
-  try {
-    const res = await fetch(BACKEND_PUBLIC_GRAPHQL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify({
-        operationName: "GetCurrentWebsite",
-        query,
-        variables: { slug }
-      }),
-      cache: "no-store",
-    });
+    try {
+      const fetchOptions: NextFetchRequestInit = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          operationName: "GetCurrentWebsite",
+          query,
+          variables: { slug }
+        }),
+      };
 
-    if (res.ok) {
-      const result = await res.json();
-      const site = result?.data?.getCurrentWebsite;
-      if (site) {
-        const mappedFeaturedListings = site.featuredListings && Array.isArray(site.featuredListings)
-          ? site.featuredListings.map(mapBackendListingToVehicle)
-          : undefined;
-
-        return {
-          id: site.id,
-          companyName: site.companyName || "",
-          slug: site.slug || slug,
-          customDomain: site.customDomain,
-          userId: site.userId,
-          dealerCategory: site.dealerCategory,
-          about: site.about || "",
-          email: site.email || "",
-          phone: site.phone || "",
-          address: site.address || "",
-          primaryColor: site.primaryColor || "",
-          secondaryColor: site.secondaryColor || "",
-          logo: resolveS3Url(site.logo),
-          heroBanner: resolveS3Url(site.heroBanner),
-          aboutBanner: resolveS3Url(site.aboutBanner),
-          financeBanner: resolveS3Url(site.financeBanner),
-          heroVideo: resolveS3Url(site.heroVideo),
-          facebookLink: site.facebookLink || "",
-          instagramLink: site.instagramLink || "",
-          youtubeLink: site.youtubeLink || "",
-          financeTitle: site.financeTitle,
-          financeDescription: site.financeDescription || "",
-          carStyles: site.carStyles || "",
-          services: site.services,
-          poweredBy: site.poweredBy || "",
-          openingHours: site.openingHours ? site.openingHours.split("\n") : [],
-          metaDescription: site.metaDescription,
-          status: site.status,
-          featuredListingIds: site.featuredListingIds,
-          featuredListings: mappedFeaturedListings
-        };
+      if (typeof window === "undefined") {
+        fetchOptions.next = { revalidate: 300 };
       }
-    }
-  } catch (error) {
-    console.warn("Backend GetCurrentWebsite query error:", error);
-  }
 
-  return null;
+      const res = await fetch(BACKEND_PUBLIC_GRAPHQL, fetchOptions);
+
+      if (res.ok) {
+        const result = await res.json();
+        const site = result?.data?.getCurrentWebsite;
+        if (site) {
+          const mappedFeaturedListings = site.featuredListings && Array.isArray(site.featuredListings)
+            ? site.featuredListings.map(mapBackendListingToVehicle)
+            : undefined;
+
+          const siteConfig: WebsiteData = {
+            id: site.id,
+            companyName: site.companyName || "",
+            slug: site.slug || slug,
+            customDomain: site.customDomain,
+            userId: site.userId,
+            dealerCategory: site.dealerCategory,
+            about: site.about || "",
+            email: site.email || "",
+            phone: site.phone || "",
+            address: site.address || "",
+            primaryColor: site.primaryColor || "",
+            secondaryColor: site.secondaryColor || "",
+            logo: resolveS3Url(site.logo),
+            heroBanner: resolveS3Url(site.heroBanner),
+            aboutBanner: resolveS3Url(site.aboutBanner),
+            financeBanner: resolveS3Url(site.financeBanner),
+            heroVideo: resolveS3Url(site.heroVideo),
+            facebookLink: site.facebookLink || "",
+            instagramLink: site.instagramLink || "",
+            youtubeLink: site.youtubeLink || "",
+            financeTitle: site.financeTitle,
+            financeDescription: site.financeDescription || "",
+            carStyles: site.carStyles || "",
+            services: site.services,
+            poweredBy: site.poweredBy || "",
+            openingHours: site.openingHours ? site.openingHours.split("\n") : [],
+            metaDescription: site.metaDescription,
+            status: site.status,
+            featuredListingIds: site.featuredListingIds,
+            featuredListings: mappedFeaturedListings
+          };
+
+          websiteConfigMemoryCache.set(cacheKey, { data: siteConfig, timestamp: Date.now() });
+          return siteConfig;
+        }
+      }
+    } catch (error) {
+      console.warn("Backend GetCurrentWebsite query error:", error);
+    } finally {
+      inFlightWebsiteConfigRequests.delete(cacheKey);
+    }
+
+    if (cached) {
+      return cached.data;
+    }
+
+    return null;
+  })();
+
+  inFlightWebsiteConfigRequests.set(cacheKey, fetchPromise);
+  return fetchPromise;
 }
 
 export const MOCK_LISTING_30978: DetailedListing = {
@@ -1073,19 +1144,36 @@ export async function fetchListingById(id: number | string): Promise<GetListingR
     }
   `;
 
-  try {
-    const res = await fetch(BACKEND_PUBLIC_GRAPHQL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify({
-        query,
-        variables: { id: numericId }
-      }),
-      cache: "no-store",
-    });
+  const cacheKey = String(numericId);
+  const cached = listingDetailsMemoryCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < LISTING_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  if (inFlightListingDetailsRequests.has(cacheKey)) {
+    return inFlightListingDetailsRequests.get(cacheKey)!;
+  }
+
+  const fetchPromise = (async (): Promise<GetListingResult | null> => {
+    try {
+      const fetchOptions: NextFetchRequestInit = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          variables: { id: numericId }
+        }),
+      };
+
+      if (typeof window === "undefined") {
+        fetchOptions.next = { revalidate: 120 };
+      }
+
+      const res = await fetch(BACKEND_PUBLIC_GRAPHQL, fetchOptions);
 
     if (res.ok) {
       const data = await res.json();
@@ -1094,15 +1182,23 @@ export async function fetchListingById(id: number | string): Promise<GetListingR
         const rawUserListings = getListingData.userListing || [];
         const mappedUserListings: Vehicle[] = rawUserListings.map(mapBackendListingToVehicle);
 
-        return {
+        const resultPayload: GetListingResult = {
           listing: getListingData.listing as DetailedListing,
           userListing: mappedUserListings,
           totalUserListing: getListingData.totalUserListing || mappedUserListings.length,
         };
+        listingDetailsMemoryCache.set(cacheKey, { data: resultPayload, timestamp: Date.now() });
+        return resultPayload;
       }
     }
   } catch (error) {
     console.warn(`Error fetching listing ${id} from GraphQL:`, error);
+  } finally {
+    inFlightListingDetailsRequests.delete(cacheKey);
+  }
+
+  if (cached) {
+    return cached.data;
   }
 
   // Fallback to mock listing if numericId is 30978 or query returned empty
@@ -1115,6 +1211,10 @@ export async function fetchListingById(id: number | string): Promise<GetListingR
   }
 
   return null;
+  })();
+
+  inFlightListingDetailsRequests.set(cacheKey, fetchPromise);
+  return fetchPromise;
 }
 
 /**

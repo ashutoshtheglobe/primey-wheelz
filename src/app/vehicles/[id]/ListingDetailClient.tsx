@@ -8,28 +8,32 @@ import {
   fetchUser883Listings,
   sendMotorEnquiry,
 } from "@/services/backendApi";
-import { DetailedListing, Vehicle, ListingContact } from "@/types";
+import { DetailedListing, Vehicle, ListingContact, GetListingResult } from "@/types";
 import { isFavourite, toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
 export default function ListingDetailPage({
   params,
+  initialListingData = null,
+  initialSimilarVehicles = [],
 }: {
   params: Promise<{ id: string }>;
+  initialListingData?: GetListingResult | null;
+  initialSimilarVehicles?: Vehicle[];
 }) {
   const resolvedParams = use(params);
   const listingId = resolvedParams.id;
 
-  const [listing, setListing] = useState<DetailedListing | null>(null);
-  const [userListings, setUserListings] = useState<Vehicle[]>([]);
-  const [totalUserListings, setTotalUserListings] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [listing, setListing] = useState<DetailedListing | null>(initialListingData?.listing || null);
+  const [userListings, setUserListings] = useState<Vehicle[]>(initialListingData?.userListing || []);
+  const [totalUserListings, setTotalUserListings] = useState<number>(initialListingData?.totalUserListing || 0);
+  const [loading, setLoading] = useState<boolean>(!initialListingData?.listing);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [showLightbox, setShowLightbox] = useState<boolean>(false);
   const [showStickyHeader, setShowStickyHeader] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [similarVehicles, setSimilarVehicles] = useState<Vehicle[]>([]);
+  const [similarVehicles, setSimilarVehicles] = useState<Vehicle[]>(initialSimilarVehicles);
 
   // Modals state
   const [activeModal, setActiveModal] = useState<"enquire" | "testdrive" | "question" | "tradein" | null>(null);
@@ -54,6 +58,10 @@ export default function ListingDetailPage({
   const heroRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (initialListingData?.listing && String(initialListingData.listing.id) === String(listingId)) {
+      setIsSaved(isFavourite(String(initialListingData.listing.id)));
+      return;
+    }
     async function loadData() {
       setLoading(true);
       const resData = await fetchListingById(listingId);
@@ -71,7 +79,7 @@ export default function ListingDetailPage({
       setLoading(false);
     }
     loadData();
-  }, [listingId]);
+  }, [listingId, initialListingData]);
 
   useEffect(() => {
     const syncFavs = () => {
@@ -436,6 +444,7 @@ export default function ListingDetailPage({
               <img
                 src={currentImage}
                 alt={listing.title}
+                fetchPriority="high"
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                 onClick={() => setShowLightbox(true)}
               />

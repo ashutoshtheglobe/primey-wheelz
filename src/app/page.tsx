@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { fetchWebsiteConfig } from "@/services/backendApi";
+import { fetchWebsiteConfig, fetchUser883Listings } from "@/services/backendApi";
 import HomeClient from "./HomeClient";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -35,6 +35,23 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function Home() {
-  return <HomeClient />;
+export default async function Home() {
+  const site = await fetchWebsiteConfig("primey-wheelz");
+  let initialVehicles = site?.featuredListings && site.featuredListings.length > 0
+    ? site.featuredListings.slice(0, 3)
+    : [];
+  let initialTotal = site?.featuredListings?.length || 0;
+
+  if (initialVehicles.length === 0) {
+    const listingsData = await fetchUser883Listings(883, 1, 3);
+    initialVehicles = listingsData.listings;
+    initialTotal = listingsData.total;
+  }
+
+  return (
+    <HomeClient
+      initialFeaturedVehicles={initialVehicles}
+      initialTotalVehicles={initialTotal}
+    />
+  );
 }

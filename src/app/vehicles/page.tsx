@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { fetchWebsiteConfig } from "@/services/backendApi";
+import { fetchWebsiteConfig, fetchUser883Listings } from "@/services/backendApi";
 import VehiclesClient from "./VehiclesClient";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -33,6 +33,13 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function VehiclesPage() {
-  return <VehiclesClient />;
+export default async function VehiclesPage() {
+  const initialData = await fetchUser883Listings(883, 1, 12);
+  return (
+    <VehiclesClient
+      initialVehicles={initialData.listings}
+      initialTotal={initialData.total}
+      initialTotalPages={initialData.totalPages}
+    />
+  );
 }

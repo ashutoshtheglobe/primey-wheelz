@@ -57,18 +57,20 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const site = await fetchWebsiteConfig("primey-wheelz");
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased bg-black text-white`}
     >
       <body className="min-h-full flex flex-col bg-black text-white font-sans">
-        <WebsiteProvider>
+        <WebsiteProvider initialSite={site}>
           <Header />
           <main className="flex-grow bg-black">{children}</main>
           <Footer />

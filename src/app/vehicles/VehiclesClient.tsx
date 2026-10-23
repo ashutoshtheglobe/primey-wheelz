@@ -7,10 +7,20 @@ import { fetchUser883Listings } from "@/services/backendApi";
 import { isFavourite, toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
-export default function VehiclesPage() {
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [totalCount, setTotalCount] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
+interface VehiclesClientProps {
+  initialVehicles?: Vehicle[];
+  initialTotal?: number;
+  initialTotalPages?: number;
+}
+
+export default function VehiclesPage({
+  initialVehicles = [],
+  initialTotal = 0,
+  initialTotalPages = 1,
+}: VehiclesClientProps) {
+  const [vehicles, setVehicles] = useState<Vehicle[]>(initialVehicles);
+  const [totalCount, setTotalCount] = useState<number>(initialTotal);
+  const [loading, setLoading] = useState<boolean>(initialVehicles.length === 0);
   const [selectedMake, setSelectedMake] = useState<string>("All");
   const [selectedBody, setSelectedBody] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -18,12 +28,20 @@ export default function VehiclesPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [favCount, setFavCount] = useState<number>(0);
   const [favIds, setFavIds] = useState<string[]>([]);
-  const [cardsVisible, setCardsVisible] = useState<boolean>(false);
+  const [cardsVisible, setCardsVisible] = useState<boolean>(initialVehicles.length > 0);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(initialTotalPages);
   const perPage = 12;
 
+  const isInitialMount = React.useRef(true);
+
   useEffect(() => {
+    if (isInitialMount.current && initialVehicles.length > 0 && currentPage === 1 && !searchQuery) {
+      isInitialMount.current = false;
+      return;
+    }
+    isInitialMount.current = false;
+
     let isMounted = true;
     async function loadData() {
       setLoading(true);
@@ -293,6 +311,8 @@ export default function VehiclesPage() {
                     <img
                       src={vehicle.images[0]}
                       alt={vehicle.title}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
 

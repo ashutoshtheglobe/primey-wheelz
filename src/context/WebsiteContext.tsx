@@ -11,41 +11,58 @@ interface WebsiteContextType {
 
 const WebsiteContext = createContext<WebsiteContextType>({
   site: null,
-  loading: true,
+  loading: false,
 });
 
-export function WebsiteProvider({ children }: { children: React.ReactNode }) {
-  const [site, setSite] = useState<WebsiteData | null>(null);
-  const [loading, setLoading] = useState(true);
+export function WebsiteProvider({
+  children,
+  initialSite = null,
+}: {
+  children: React.ReactNode;
+  initialSite?: WebsiteData | null;
+}) {
+  const [site, setSite] = useState<WebsiteData | null>(initialSite);
+  const [loading, setLoading] = useState<boolean>(!initialSite);
 
   useEffect(() => {
+    // If already initialized with initialSite or site, no need to fetch
+    if (initialSite || site) {
+      return;
+    }
+
+    let isMounted = true;
     async function loadData() {
       try {
         const data = await fetchWebsiteConfig("primey-wheelz");
-        setSite(data);
+        if (isMounted) {
+          setSite(data);
+        }
       } catch (err) {
         console.error("Error loading website config:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
     loadData();
-  }, []);
 
-  if (loading) {
+    return () => {
+      isMounted = false;
+    };
+  }, [initialSite, site]);
+
+  // Only render fallback if there is truly no site data and still loading
+  if (loading && !site) {
     return (
       <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center select-none font-sans">
         <div className="relative flex flex-col items-center">
-          {/* Outer glowing ring */}
           <div className="w-20 h-20 border-4 border-zinc-800 border-t-[#C2410C] rounded-full animate-spin mb-6" />
-
-          {/* Center Brand Pulse */}
           <div className="flex items-center gap-2">
             <span className="text-2xl font-black text-white font-mono uppercase tracking-widest animate-pulse">
               PRIMEY <span className="text-[#C2410C]">WHEELZ</span>
             </span>
           </div>
-
           <p className="text-xs text-gray-500 font-mono uppercase tracking-widest mt-3 animate-pulse">
             Loading Live Website Data...
           </p>

@@ -8,11 +8,19 @@ import { useWebsite } from "@/context/WebsiteContext";
 import { toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
-export default function Home() {
+interface HomeClientProps {
+  initialFeaturedVehicles?: Vehicle[];
+  initialTotalVehicles?: number;
+}
+
+export default function Home({
+  initialFeaturedVehicles = [],
+  initialTotalVehicles = 0,
+}: HomeClientProps) {
   const { site } = useWebsite();
-  const [featuredVehicles, setFeaturedVehicles] = useState<Vehicle[]>([]);
-  const [totalVehicles, setTotalVehicles] = useState<number>(0);
-  const [loadingListings, setLoadingListings] = useState<boolean>(true);
+  const [featuredVehicles, setFeaturedVehicles] = useState<Vehicle[]>(initialFeaturedVehicles);
+  const [totalVehicles, setTotalVehicles] = useState<number>(initialTotalVehicles);
+  const [loadingListings, setLoadingListings] = useState<boolean>(initialFeaturedVehicles.length === 0);
   const [favIds, setFavIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -37,13 +45,16 @@ export default function Home() {
   const categoriesSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (initialFeaturedVehicles.length > 0 && (!site?.featuredListings || site.featuredListings.length === 0)) {
+      return;
+    }
     async function loadBackendData() {
-      setLoadingListings(true);
       if (site?.featuredListings && site.featuredListings.length > 0) {
         setFeaturedVehicles(site.featuredListings.slice(0, 3));
         setTotalVehicles(site.featuredListings.length);
         setLoadingListings(false);
-      } else {
+      } else if (featuredVehicles.length === 0) {
+        setLoadingListings(true);
         const listingsData = await fetchUser883Listings(883, 1, 3);
         setFeaturedVehicles(listingsData.listings);
         setTotalVehicles(listingsData.total);
@@ -51,7 +62,7 @@ export default function Home() {
       }
     }
     loadBackendData();
-  }, [site]);
+  }, [site, initialFeaturedVehicles]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -248,6 +259,8 @@ export default function Home() {
               >
                 <img
                   src={cat.image}
+                  loading="lazy"
+                  decoding="async"
                   alt={cat.title}
                   className={`w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
                     cat.isMonochrome ? "grayscale contrast-125 opacity-70 group-hover:opacity-90" : "opacity-85"
@@ -325,6 +338,8 @@ export default function Home() {
                     <div className="relative h-64 md:h-72 w-full rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 select-none">
                       <img
                         src={vehicle.images[0]}
+                        loading="lazy"
+                        decoding="async"
                         alt={vehicle.title}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
