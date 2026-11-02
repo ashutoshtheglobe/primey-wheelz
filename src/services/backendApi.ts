@@ -50,6 +50,11 @@ export interface BackendListing {
       name: string;
     };
   }[];
+  additionalAttributeInfo?: {
+    attributeId?: number;
+    name?: string;
+    value?: string;
+  }[];
   location?: {
     address: string;
     city: string;
@@ -99,12 +104,21 @@ function sortListingMedia<T extends { fieldName?: string }>(media: T[]): T[] {
 
 function mapBackendListingToVehicle(item: BackendListing): Vehicle {
   const getAttr = (...names: string[]): string => {
-    if (!item.listingAttributeOptions) return "";
-    for (const name of names) {
-      const found = item.listingAttributeOptions.find(
-        (o) => o.listingAttribute?.name?.toLowerCase() === name.toLowerCase()
-      );
-      if (found?.value) return found.value;
+    if (item.listingAttributeOptions) {
+      for (const name of names) {
+        const found = item.listingAttributeOptions.find(
+          (o) => o.listingAttribute?.name?.toLowerCase() === name.toLowerCase()
+        );
+        if (found?.value) return found.value;
+      }
+    }
+    if (item.additionalAttributeInfo) {
+      for (const name of names) {
+        const found = item.additionalAttributeInfo.find(
+          (a) => a.name?.toLowerCase() === name.toLowerCase()
+        );
+        if (found?.value) return found.value;
+      }
     }
     return "";
   };
@@ -127,8 +141,8 @@ function mapBackendListingToVehicle(item: BackendListing): Vehicle {
     images.push(`${S3_BASE_URL}assets/images/theglobe-logo.svg`);
   }
 
-  const rawKm = getAttr("Kilometres", "Odometer", "Km");
-  const kilometers = rawKm ? parseInt(rawKm.replace(/[^0-9]/g, "")) || undefined : undefined;
+  const rawKm = getAttr("Kilometres", "Odometer", "Km", "Kms", "kms", "Mileage");
+  const kilometers = rawKm ? parseInt(rawKm.replace(/[^0-9]/g, ""), 10) || undefined : undefined;
   
   const rawYear = getAttr("Year Of Manufacture", "Year");
   const year = rawYear ? parseInt(rawYear) || undefined : undefined;
@@ -143,7 +157,16 @@ function mapBackendListingToVehicle(item: BackendListing): Vehicle {
 
   const make = getAttr("Make", "Manufacturer");
   const model = getAttr("Model");
-  const engineSize = getAttr("Engine Size", "Engine");
+  const rawEngine = getAttr("Cc Rating", "CC Rating", "cc rating", "Engine Size", "Engine", "cc");
+  let engineSize = "";
+  if (rawEngine && rawEngine.trim()) {
+    const trimmed = rawEngine.trim();
+    if (/^\d+$/.test(trimmed)) {
+      engineSize = `${parseInt(trimmed, 10).toLocaleString("en-NZ")}cc`;
+    } else {
+      engineSize = trimmed;
+    }
+  }
   const transmission = getAttr("Transmission");
   const fuelType = getAttr("Fuel Type", "Fuel");
   const bodyStyle = getAttr("Body Type", "Body Style");
@@ -263,6 +286,11 @@ export async function fetchUser883Listings(
               id
               name
             }
+          }
+          additionalAttributeInfo {
+            attributeId
+            name
+            value
           }
           location {
             address
@@ -412,6 +440,11 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promis
               id
               name
             }
+          }
+          additionalAttributeInfo {
+            attributeId
+            name
+            value
           }
           location {
             address
@@ -577,6 +610,18 @@ export const MOCK_LISTING_30978: DetailedListing = {
         id: 38,
         name: "Crash Avoidance Stars"
       }
+    }
+  ],
+  additionalAttributeInfo: [
+    {
+      attributeId: 38,
+      name: "kms",
+      value: "85000"
+    },
+    {
+      attributeId: 39,
+      name: "Cc Rating",
+      value: "2400"
     }
   ],
   listingMedia: [
@@ -1113,6 +1158,11 @@ export async function fetchListingById(id: number | string): Promise<GetListingR
               name
             }
           }
+          additionalAttributeInfo {
+            attributeId
+            name
+            value
+          }
           listingMedia {
             fieldName
             fileName
@@ -1133,6 +1183,19 @@ export async function fetchListingById(id: number | string): Promise<GetListingR
           createdAt
           listingView
           status
+          listingAttributeOptions {
+            id
+            value
+            listingAttribute {
+              id
+              name
+            }
+          }
+          additionalAttributeInfo {
+            attributeId
+            name
+            value
+          }
           listingMedia {
             fieldName
             fileName

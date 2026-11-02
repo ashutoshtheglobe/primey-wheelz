@@ -262,14 +262,23 @@ export default function ListingDetailPage({
     );
   }
 
-  // Extract listing attribute helper
+  // Extract listing attribute helper (checks both listingAttributeOptions and additionalAttributeInfo)
   const getAttr = (...names: string[]): string => {
-    if (!listing.listingAttributeOptions) return "";
-    for (const name of names) {
-      const found = listing.listingAttributeOptions.find(
-        (o) => o.listingAttribute?.name?.toLowerCase() === name.toLowerCase()
-      );
-      if (found?.value) return found.value;
+    if (listing.listingAttributeOptions) {
+      for (const name of names) {
+        const found = listing.listingAttributeOptions.find(
+          (o) => o.listingAttribute?.name?.toLowerCase() === name.toLowerCase()
+        );
+        if (found?.value && found.value.trim()) return found.value.trim();
+      }
+    }
+    if (listing.additionalAttributeInfo) {
+      for (const name of names) {
+        const found = listing.additionalAttributeInfo.find(
+          (a) => a.name?.toLowerCase() === name.toLowerCase()
+        );
+        if (found?.value && found.value.trim()) return found.value.trim();
+      }
     }
     return "";
   };
@@ -277,13 +286,43 @@ export default function ListingDetailPage({
   const images = getListingImageUrls(listing);
   const currentImage = images[activeImageIndex] || images[0];
 
-  const bodyType = getAttr("Body Type") || "Vehicle";
-  const engineSize = getAttr("Engine Size") || "N/A";
-  const crashStars = getAttr("Crash Avoidance Stars") || "N/A";
-  const odometer = getAttr("Kilometres", "Odometer", "Km") || "N/A";
+  const bodyType = getAttr("Body Type", "Body Style") || "Vehicle";
+
+  // Format engine size (handles "Cc Rating" like 2500 -> 2,500cc, "Engine Size", "Engine", "cc")
+  const rawEngine = getAttr("Cc Rating", "CC Rating", "cc rating", "Engine Size", "Engine", "cc");
+  let engineSize = "N/A";
+  if (rawEngine) {
+    const trimmed = rawEngine.trim();
+    if (/^\d+$/.test(trimmed)) {
+      engineSize = `${parseInt(trimmed, 10).toLocaleString("en-NZ")}cc`;
+    } else {
+      engineSize = trimmed;
+    }
+  }
+
+  // Format odometer (handles "kms", "Kms", "Kilometres", "Odometer", "Km" like 97000 -> 97,000 km)
+  const rawOdometer = getAttr("Kilometres", "Odometer", "Km", "Kms", "kms", "Mileage");
+  let odometer = "N/A";
+  if (rawOdometer) {
+    const num = parseInt(rawOdometer.replace(/[^0-9]/g, ""), 10);
+    if (!isNaN(num) && num > 0) {
+      odometer = `${num.toLocaleString("en-NZ")} km`;
+    } else if (rawOdometer.trim()) {
+      odometer = rawOdometer.trim();
+    }
+  }
+
+  const crashStars = getAttr("Crash Avoidance Stars", "Safety Stars", "Driver Safety Stars") || "N/A";
   const transmission = getAttr("Transmission") || "Automatic";
   const fuelType = getAttr("Fuel Type", "Fuel") || "Petrol";
-  const yearStr = getAttr("Year", "Year Of Manufacture") || "2026";
+  const yearStr = getAttr("Year Of Manufacture", "Year") || "";
+  const regoNo = getAttr("Registration Number", "Plate", "Plate / Rego", "Rego");
+  const wofExpiry = getAttr("Wof Expiry", "WOF Expiry");
+  const regoExpiry = getAttr("Registration Expiry", "Rego Expiry");
+  const seats = getAttr("No Of Seats", "Seats");
+  const displayTitle = yearStr && !listing.title.trim().startsWith(yearStr)
+    ? `${yearStr} ${listing.title}`
+    : listing.title;
 
   const price = listing.salePrice || listing.listPrice || listing.basePrice || 0;
   const wasPrice = listing.basePrice && listing.basePrice > price ? listing.basePrice : null;
@@ -360,7 +399,7 @@ export default function ListingDetailPage({
             />
             <div className="truncate">
               <h2 className="text-sm font-bold font-mono text-white uppercase truncate">
-                {yearStr} {listing.title}
+                {displayTitle}
               </h2>
               <div className="text-xs text-[#C2410C] font-mono font-extrabold">
                 {saleMethodDetails.isPBN ? "Price By Negotiation" : `$${price.toLocaleString("en-NZ")}`}
@@ -551,7 +590,7 @@ export default function ListingDetailPage({
             <div>
               <div className="flex items-start justify-between gap-4">
                 <h1 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tight font-mono leading-none">
-                  {yearStr} {listing.title}
+                  {displayTitle}
                 </h1>
                 
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -582,7 +621,12 @@ export default function ListingDetailPage({
 
               {/* Highlight Specs Summary Line */}
               <p className="mt-3 text-sm md:text-base text-zinc-400 font-sans">
-                {[locationStr, bodyType, engineSize].filter(Boolean).join(" · ")}
+                {[
+                  locationStr,
+                  bodyType,
+                  engineSize !== "N/A" ? engineSize : null,
+                  odometer !== "N/A" ? odometer : null,
+                ].filter(Boolean).join(" · ")}
               </p>
             </div>
 
@@ -631,11 +675,6 @@ export default function ListingDetailPage({
                   </div>
 
                   <div className="flex justify-between border-b border-zinc-800/60 pb-3">
-                    <span className="text-gray-400 font-sans">Crash Avoidance</span>
-                    <span className="font-mono font-bold text-amber-400">{crashStars} Stars</span>
-                  </div>
-
-                  <div className="flex justify-between border-b border-zinc-800/60 pb-3">
                     <span className="text-gray-400 font-sans">Odometer</span>
                     <span className="font-mono font-bold text-white">{odometer}</span>
                   </div>
@@ -648,6 +687,41 @@ export default function ListingDetailPage({
                   <div className="flex justify-between border-b border-zinc-800/60 pb-3">
                     <span className="text-gray-400 font-sans">Fuel Type</span>
                     <span className="font-mono font-bold text-white">{fuelType}</span>
+                  </div>
+
+                  {seats && (
+                    <div className="flex justify-between border-b border-zinc-800/60 pb-3">
+                      <span className="text-gray-400 font-sans">Seats</span>
+                      <span className="font-mono font-bold text-white">{seats}</span>
+                    </div>
+                  )}
+
+                  {regoNo && (
+                    <div className="flex justify-between border-b border-zinc-800/60 pb-3">
+                      <span className="text-gray-400 font-sans">Registration / Plate</span>
+                      <span className="font-mono font-bold text-white uppercase">{regoNo}</span>
+                    </div>
+                  )}
+
+                  {wofExpiry && (
+                    <div className="flex justify-between border-b border-zinc-800/60 pb-3">
+                      <span className="text-gray-400 font-sans">WOF Expiry</span>
+                      <span className="font-mono font-bold text-white">{wofExpiry}</span>
+                    </div>
+                  )}
+
+                  {regoExpiry && (
+                    <div className="flex justify-between border-b border-zinc-800/60 pb-3">
+                      <span className="text-gray-400 font-sans">Rego Expiry</span>
+                      <span className="font-mono font-bold text-white">{regoExpiry}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between border-b border-zinc-800/60 pb-3">
+                    <span className="text-gray-400 font-sans">Crash Avoidance</span>
+                    <span className="font-mono font-bold text-amber-400">
+                      {crashStars !== "N/A" ? `${crashStars} Stars` : "N/A"}
+                    </span>
                   </div>
 
                   <div className="flex justify-between border-b border-zinc-800/60 pb-3">
@@ -685,6 +759,14 @@ export default function ListingDetailPage({
                 </div>
 
                 <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center gap-3">
+                  <span className="text-xl">⏱️</span>
+                  <div>
+                    <div className="text-[11px] text-gray-400 uppercase font-mono">Odometer</div>
+                    <div className="text-sm font-mono font-bold text-white">{odometer}</div>
+                  </div>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center gap-3">
                   <span className="text-xl">🚗</span>
                   <div>
                     <div className="text-[11px] text-gray-400 uppercase font-mono">Body</div>
@@ -696,7 +778,9 @@ export default function ListingDetailPage({
                   <span className="text-xl">🛡️</span>
                   <div>
                     <div className="text-[11px] text-gray-400 uppercase font-mono">Safety Rating</div>
-                    <div className="text-sm font-mono font-bold text-amber-400">{crashStars} Stars</div>
+                    <div className="text-sm font-mono font-bold text-amber-400">
+                      {crashStars !== "N/A" ? `${crashStars} Stars` : "N/A"}
+                    </div>
                   </div>
                 </div>
 
@@ -705,14 +789,6 @@ export default function ListingDetailPage({
                   <div>
                     <div className="text-[11px] text-gray-400 uppercase font-mono">Location</div>
                     <div className="text-sm font-mono font-bold text-white">{listing.location?.city || "Dargaville"}</div>
-                  </div>
-                </div>
-
-                <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center gap-3">
-                  <span className="text-xl">🏷️</span>
-                  <div>
-                    <div className="text-[11px] text-gray-400 uppercase font-mono">Sale Method</div>
-                    <div className="text-sm font-mono font-bold text-white capitalize">{saleMethodDetails.label}</div>
                   </div>
                 </div>
 

@@ -121,6 +121,12 @@ export interface ListingMedia {
   filePath: string;
 }
 
+export interface ListingAttributeInfo {
+  attributeId?: number;
+  name?: string;
+  value?: string;
+}
+
 export interface DetailedListing {
   id: number;
   title: string;
@@ -142,6 +148,7 @@ export interface DetailedListing {
   location?: ListingLocation;
   user?: ListingUser;
   listingAttributeOptions?: ListingAttributeOption[];
+  additionalAttributeInfo?: ListingAttributeInfo[];
   listingMedia?: ListingMedia[];
 }
 

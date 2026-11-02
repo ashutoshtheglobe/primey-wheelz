@@ -44,14 +44,21 @@ export async function generateMetadata({
       : "Price By Negotiation";
 
   // Extract year if available
-  const yearOpt = listing.listingAttributeOptions?.find(
-    (o) =>
-      o.listingAttribute?.name?.toLowerCase() === "year" ||
-      o.listingAttribute?.name?.toLowerCase() === "year of manufacture"
-  );
-  const yearStr = yearOpt?.value ? `${yearOpt.value} ` : "";
+  const yearOpt =
+    listing.listingAttributeOptions?.find(
+      (o) =>
+        o.listingAttribute?.name?.toLowerCase() === "year" ||
+        o.listingAttribute?.name?.toLowerCase() === "year of manufacture"
+    ) ||
+    listing.additionalAttributeInfo?.find(
+      (a) =>
+        a.name?.toLowerCase() === "year" ||
+        a.name?.toLowerCase() === "year of manufacture"
+    );
+  const yearVal = yearOpt?.value?.trim() || "";
+  const yearPrefix = yearVal && !listing.title.trim().startsWith(yearVal) ? `${yearVal} ` : "";
 
-  const pageTitle = `${yearStr}${listing.title} - ${formattedPrice} | ${siteName}`;
+  const pageTitle = `${yearPrefix}${listing.title} - ${formattedPrice} | ${siteName}`;
 
   const rawDesc = listing.description
     ? listing.description.replace(/[\r\n]+/g, " ").trim()
@@ -61,7 +68,7 @@ export async function generateMetadata({
       ? rawDesc.length > 160
         ? `${rawDesc.slice(0, 157)}...`
         : rawDesc
-      : `View details, photos, finance calculator and enquire for ${yearStr}${listing.title} (${formattedPrice}) at ${siteName}.`;
+      : `View details, photos, finance calculator and enquire for ${yearPrefix}${listing.title} (${formattedPrice}) at ${siteName}.`;
 
   const canonicalUrl = `https://${domain}/vehicles/${listing.id}`;
 
