@@ -36,25 +36,31 @@ export default function VehiclesPage({
   const isInitialMount = React.useRef(true);
 
   useEffect(() => {
-    if (isInitialMount.current && initialVehicles.length > 0 && currentPage === 1 && !searchQuery) {
-      isInitialMount.current = false;
-      return;
-    }
+    let isMounted = true;
+    const isFirstLoad = isInitialMount.current;
     isInitialMount.current = false;
 
-    let isMounted = true;
     async function loadData() {
-      setLoading(true);
-      setCardsVisible(false);
+      // For user interactions (page change, search), show smooth loading state.
+      // On first load, keep cards visible (0ms instant render) and refresh quietly in background (SWR).
+      if (!isFirstLoad) {
+        setLoading(true);
+        setCardsVisible(false);
+      }
+
       const response = await fetchUser883Listings(883, currentPage, perPage, searchQuery);
       if (isMounted) {
         setVehicles(response.listings);
         setTotalCount(response.total);
         setTotalPages(response.totalPages);
         setLoading(false);
-        setTimeout(() => {
-          if (isMounted) setCardsVisible(true);
-        }, 50);
+        if (!isFirstLoad) {
+          setTimeout(() => {
+            if (isMounted) setCardsVisible(true);
+          }, 50);
+        } else {
+          setCardsVisible(true);
+        }
       }
     }
     loadData();

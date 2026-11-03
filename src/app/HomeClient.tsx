@@ -51,7 +51,6 @@ export default function Home({
     async function loadBackendData() {
       if (site?.featuredListings && site.featuredListings.length > 0) {
         setFeaturedVehicles(site.featuredListings.slice(0, 3));
-        setTotalVehicles(site.featuredListings.length);
         setLoadingListings(false);
       } else if (featuredVehicles.length === 0) {
         setLoadingListings(true);

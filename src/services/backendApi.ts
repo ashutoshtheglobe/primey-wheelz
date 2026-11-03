@@ -227,6 +227,12 @@ const listingsMemoryCache = new Map<string, CacheEntry<BackendListingsResponse>>
 const websiteConfigMemoryCache = new Map<string, CacheEntry<WebsiteData | null>>();
 const listingDetailsMemoryCache = new Map<string, CacheEntry<GetListingResult | null>>();
 
+export function clearAllMemoryCaches(): void {
+  listingsMemoryCache.clear();
+  websiteConfigMemoryCache.clear();
+  listingDetailsMemoryCache.clear();
+}
+
 const inFlightUser883Requests = new Map<string, Promise<BackendListingsResponse>>();
 const inFlightWebsiteConfigRequests = new Map<string, Promise<WebsiteData | null>>();
 const inFlightListingDetailsRequests = new Map<string, Promise<GetListingResult | null>>();
@@ -242,11 +248,12 @@ export async function fetchUser883Listings(
   userId: number = 883,
   page: number = 1,
   perPage: number = 12,
-  keyword: string = ""
+  keyword: string = "",
+  sortBy: string = "createdAt:desc"
 ): Promise<BackendListingsResponse> {
-  const cacheKey = `${userId}_${page}_${perPage}_${keyword.trim().toLowerCase()}`;
+  const cacheKey = `${userId}_${page}_${perPage}_${keyword.trim().toLowerCase()}_${sortBy}`;
 
-  // 1. Check in-memory cache for instant 0ms return
+  // 1. Check in-memory cache for instant 0ms return if fresh
   const cached = listingsMemoryCache.get(cacheKey);
   const now = Date.now();
   if (cached && now - cached.timestamp < LISTINGS_CACHE_TTL_MS) {
@@ -255,13 +262,14 @@ export async function fetchUser883Listings(
 
   // 2. Reuse ongoing in-flight request to prevent duplicate remote queries
   if (inFlightUser883Requests.has(cacheKey)) {
+    if (cached) return cached.data;
     return inFlightUser883Requests.get(cacheKey)!;
   }
 
   const fetchPromise = (async (): Promise<BackendListingsResponse> => {
     const query = `
-    query FetchUserListing($userId: Int!, $keyword: String, $page: Int, $perPage: Int) {
-      fetchUserListing(userId: $userId, keyword: $keyword, page: $page, perPage: $perPage) {
+    query FetchUserListing($userId: Int!, $keyword: String, $page: Int, $perPage: Int, $sortBy: String) {
+      fetchUserListing(userId: $userId, keyword: $keyword, page: $page, perPage: $perPage, sortBy: $sortBy) {
         listings {
           id
           title
@@ -317,12 +325,18 @@ export async function fetchUser883Listings(
         },
         body: JSON.stringify({
           query,
-          variables: { userId: Number(userId), keyword: keyword || null, page, perPage }
+          variables: {
+            userId: Number(userId),
+            keyword: keyword || null,
+            page,
+            perPage,
+            sortBy: sortBy || "createdAt:desc",
+          }
         }),
       };
 
       if (typeof window === "undefined") {
-        fetchOptions.next = { revalidate: 60 };
+        fetchOptions.cache = "no-store";
       }
 
       const res = await fetch(BACKEND_PUBLIC_GRAPHQL, fetchOptions);
@@ -362,6 +376,13 @@ export async function fetchUser883Listings(
   })();
 
   inFlightUser883Requests.set(cacheKey, fetchPromise);
+
+  // 3. Stale-While-Revalidate: Return cached data instantly (0ms response)
+  // while the background fetchPromise refreshes the cache for future requests.
+  if (cached) {
+    return cached.data;
+  }
+
   return fetchPromise;
 }
 
@@ -380,6 +401,7 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promis
 
   // 2. Reuse ongoing in-flight request
   if (inFlightWebsiteConfigRequests.has(cacheKey)) {
+    if (cached) return cached.data;
     return inFlightWebsiteConfigRequests.get(cacheKey)!;
   }
 
@@ -535,6 +557,9 @@ export async function fetchWebsiteConfig(slug: string = "primey-wheelz"): Promis
   })();
 
   inFlightWebsiteConfigRequests.set(cacheKey, fetchPromise);
+  if (cached) {
+    return cached.data;
+  }
   return fetchPromise;
 }
 
@@ -1215,6 +1240,7 @@ export async function fetchListingById(id: number | string): Promise<GetListingR
   }
 
   if (inFlightListingDetailsRequests.has(cacheKey)) {
+    if (cached) return cached.data;
     return inFlightListingDetailsRequests.get(cacheKey)!;
   }
 
@@ -1277,6 +1303,9 @@ export async function fetchListingById(id: number | string): Promise<GetListingR
   })();
 
   inFlightListingDetailsRequests.set(cacheKey, fetchPromise);
+  if (cached) {
+    return cached.data;
+  }
   return fetchPromise;
 }
 

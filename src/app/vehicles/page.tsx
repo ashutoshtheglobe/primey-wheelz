@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { fetchWebsiteConfig, fetchUser883Listings } from "@/services/backendApi";
 import VehiclesClient from "./VehiclesClient";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   const site = await fetchWebsiteConfig("primey-wheelz");
   const siteName = site?.companyName || "Primey Wheelz";

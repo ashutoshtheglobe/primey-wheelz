@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { fetchWebsiteConfig, fetchUser883Listings } from "@/services/backendApi";
 import HomeClient from "./HomeClient";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   const site = await fetchWebsiteConfig("primey-wheelz");
   const siteName = site?.companyName || "Primey Wheelz";
@@ -37,16 +39,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function Home() {
   const site = await fetchWebsiteConfig("primey-wheelz");
-  let initialVehicles = site?.featuredListings && site.featuredListings.length > 0
-    ? site.featuredListings.slice(0, 3)
-    : [];
-  let initialTotal = site?.featuredListings?.length || 0;
+  const listingsData = await fetchUser883Listings(883, 1, 3);
 
-  if (initialVehicles.length === 0) {
-    const listingsData = await fetchUser883Listings(883, 1, 3);
-    initialVehicles = listingsData.listings;
-    initialTotal = listingsData.total;
-  }
+  const initialVehicles = site?.featuredListings && site.featuredListings.length > 0
+    ? site.featuredListings.slice(0, 3)
+    : listingsData.listings;
+  const initialTotal = listingsData.total;
 
   return (
     <HomeClient
