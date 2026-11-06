@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useWebsite } from "@/context/WebsiteContext";
 import {
   submitTradeInApplication,
+  uploadBatchMediaFiles,
   uploadMediaFile,
   UploadedMediaItem,
 } from "@/services/backendApi";
@@ -79,20 +80,14 @@ export default function PriceMyTradePage() {
 
     const fullName = `${form.firstName} ${form.lastName}`.trim();
 
-    // 1. Upload photos to backend S3 /upload-guest if any are attached
-    const uploadedMedia: UploadedMediaItem[] = [];
+    // 1. Fast parallel Direct-to-S3 batch upload
+    let uploadedMedia: UploadedMediaItem[] = [];
     if (selectedPhotos.length > 0) {
-      setUploadProgressMsg(`Uploading ${selectedPhotos.length} vehicle photo(s)...`);
-      for (let i = 0; i < selectedPhotos.length; i++) {
-        const uploaded = await uploadMediaFile(
-          selectedPhotos[i].file,
-          `photo[${i}]`,
-          "trade-in"
-        );
-        if (uploaded) {
-          uploadedMedia.push(uploaded);
-        }
-      }
+      uploadedMedia = await uploadBatchMediaFiles(
+        selectedPhotos.map((p) => p.file),
+        "trade-in",
+        (msg) => setUploadProgressMsg(msg)
+      );
     }
 
     setUploadProgressMsg("Submitting Trade-In Enquiry...");

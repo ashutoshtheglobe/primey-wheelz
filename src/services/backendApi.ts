@@ -797,6 +797,103 @@ export async function uploadMediaFile(
   return null;
 }
 
+
+/**
+ * High-speed direct S3 batch upload (matches theglobe-frontend direct-to-S3 flow).
+ * Uploads all files in parallel directly to S3 via presigned URLs for maximum speed.
+ */
+export async function uploadBatchMediaFiles(
+  files: File[],
+  type: string = "trade-in",
+  onProgressMsg?: (msg: string) => void
+): Promise<UploadedMediaItem[]> {
+  if (!files || files.length === 0) return [];
+
+  const PRESIGNED_BATCH_ENDPOINT = MOTOR_ENQUIRY_ENDPOINT.replace(/\/motorEnquiry\/?$/, "/presigned-upload-batch");
+  const PRESIGNED_COMPLETE_ENDPOINT = MOTOR_ENQUIRY_ENDPOINT.replace(/\/motorEnquiry\/?$/, "/presigned-upload-complete");
+
+  try {
+    if (onProgressMsg) onProgressMsg(`Requesting fast upload URLs for ${files.length} photo(s)...`);
+
+    // 1. Get presigned batch URLs from backend (~20ms)
+    const presignRes = await fetch(PRESIGNED_BATCH_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: files.map((file, i) => ({
+          fieldname: `photo[${i}]`,
+          originalname: file.name,
+          mimetype: file.type || "image/jpeg",
+          size: file.size,
+        })),
+        type,
+      }),
+    });
+
+    if (presignRes.ok) {
+      const presignData = await presignRes.json();
+      if (presignData.success && Array.isArray(presignData.files) && presignData.files.length === files.length) {
+        if (onProgressMsg) onProgressMsg(`Uploading ${files.length} photo(s) directly to S3 in parallel...`);
+
+        // 2. Upload all files in parallel directly to S3
+        await Promise.all(
+          presignData.files.map(async (item: any, idx: number) => {
+            const rawFile = files[idx];
+            const s3UploadRes = await fetch(item.uploadUrl, {
+              method: "PUT",
+              headers: {
+                "Content-Type": item.mimetype || rawFile.type || "image/jpeg",
+              },
+              body: rawFile,
+            });
+
+            if (!s3UploadRes.ok) {
+              throw new Error(`S3 direct upload failed for ${rawFile.name}: ${s3UploadRes.statusText}`);
+            }
+          })
+        );
+
+        // 3. Complete registration
+        if (onProgressMsg) onProgressMsg("Finalizing photo upload...");
+        await fetch(PRESIGNED_COMPLETE_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ files: presignData.files }),
+        }).catch(() => {});
+
+        return presignData.files.map((doc: any, i: number) => {
+          const rawPath = doc.path || doc.filePath || doc.filename || doc.s3Key || "";
+          let cleanPath = typeof rawPath === "string" ? rawPath : String(rawPath);
+          cleanPath = cleanPath.replace(/^https?:\/\/[^\/]+\//, "").replace(/^\//, "");
+          const fullUrl = `${S3_BASE_URL}${cleanPath}`;
+
+          return {
+            fieldName: doc.fieldname || `photo[${i}]`,
+            fileName: doc.originalname || doc.filename || files[i].name,
+            filePath: cleanPath,
+            fileSize: doc.size || files[i].size,
+            url: fullUrl,
+            fullUrl: fullUrl,
+            location: fullUrl,
+            path: cleanPath,
+          };
+        });
+      }
+    }
+  } catch (directErr) {
+    console.warn("Direct S3 batch upload failed, falling back to proxy upload:", directErr);
+  }
+
+  // Fallback to sequential proxy upload
+  if (onProgressMsg) onProgressMsg(`Uploading ${files.length} photo(s)...`);
+  const fallbackList: UploadedMediaItem[] = [];
+  for (let i = 0; i < files.length; i++) {
+    const item = await uploadMediaFile(files[i], `photo[${i}]`, type);
+    if (item) fallbackList.push(item);
+  }
+  return fallbackList;
+}
+
 export interface CreateTradeInInput {
   dealerId?: number | string | null;
   numberPlate?: string | null;
@@ -885,7 +982,12 @@ export async function submitTradeInApplication(input: CreateTradeInInput): Promi
     phone: input.phone || "",
     email: input.email || "",
     message: updatedMessage,
-    photoUrls: fullPhotoUrls,
+    photoUrls: fullPhotoUrls.map((p) => ({
+      fieldName: p.fieldName || "photo",
+      fileName: p.fileName || "photo.webp",
+      filePath: p.filePath,
+      fileSize: p.fileSize ? Math.round(Number(p.fileSize)) : 0,
+    })),
   };
 
   let restSuccess = false;
