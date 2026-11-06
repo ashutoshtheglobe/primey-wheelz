@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Vehicle } from "@/types";
-import { fetchUser883Listings } from "@/services/backendApi";
+import { fetchDealerListings } from "@/services/backendApi";
 import { useWebsite } from "@/context/WebsiteContext";
 import { toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
@@ -54,7 +54,7 @@ export default function Home({
         setLoadingListings(false);
       } else if (featuredVehicles.length === 0) {
         setLoadingListings(true);
-        const listingsData = await fetchUser883Listings(883, 1, 3);
+        const listingsData = await fetchDealerListings(site?.userId || undefined, 1, 3);
         setFeaturedVehicles(listingsData.listings);
         setTotalVehicles(listingsData.total);
         setLoadingListings(false);

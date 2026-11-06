@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { fetchWebsiteConfig, fetchUser883Listings } from "@/services/backendApi";
+import { fetchWebsiteConfig, fetchDealerListings } from "@/services/backendApi";
 import VehiclesClient from "./VehiclesClient";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function VehiclesPage() {
-  const initialData = await fetchUser883Listings(883, 1, 12);
+  const site = await fetchWebsiteConfig("primey-wheelz");
+  const initialData = await fetchDealerListings(site?.userId || undefined, 1, 12);
   return (
     <VehiclesClient
       initialVehicles={initialData.listings}

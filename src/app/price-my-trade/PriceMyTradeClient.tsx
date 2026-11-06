@@ -116,7 +116,7 @@ ${form.comments || "None"}
     const recipientEmails = site?.email ? [site.email] : [form.email];
 
     const result = await submitTradeInApplication({
-      dealerId: site?.userId || 251,
+      dealerId: site?.userId || undefined,
       numberPlate: form.plateNo || "",
       odometer: form.odometer || "",
       condition: "Good",

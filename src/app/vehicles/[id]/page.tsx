@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import {
   fetchListingById,
   fetchWebsiteConfig,
-  fetchUser883Listings,
+  fetchDealerListings,
   getListingImageUrls,
 } from "@/services/backendApi";
 import ListingDetailClient from "./ListingDetailClient";
@@ -111,7 +111,7 @@ export default async function ListingDetailPage({
   const listingId = resolvedParams.id;
   const [data, recentData] = await Promise.all([
     fetchListingById(listingId),
-    fetchUser883Listings(883, 1, 4),
+    fetchDealerListings(undefined, 1, 4),
   ]);
 
   return (

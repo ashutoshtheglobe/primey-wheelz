@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Vehicle } from "@/types";
-import { fetchUser883Listings } from "@/services/backendApi";
+import { fetchDealerListings } from "@/services/backendApi";
+import { useWebsite } from "@/context/WebsiteContext";
 import { isFavourite, toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
@@ -14,10 +15,12 @@ interface VehiclesClientProps {
 }
 
 export default function VehiclesPage({
+
   initialVehicles = [],
   initialTotal = 0,
   initialTotalPages = 1,
 }: VehiclesClientProps) {
+  const { site } = useWebsite();
   const [vehicles, setVehicles] = useState<Vehicle[]>(initialVehicles);
   const [totalCount, setTotalCount] = useState<number>(initialTotal);
   const [loading, setLoading] = useState<boolean>(initialVehicles.length === 0);
@@ -48,7 +51,7 @@ export default function VehiclesPage({
         setCardsVisible(false);
       }
 
-      const response = await fetchUser883Listings(883, currentPage, perPage, searchQuery);
+      const response = await fetchDealerListings(site?.userId || undefined, currentPage, perPage, searchQuery);
       if (isMounted) {
         setVehicles(response.listings);
         setTotalCount(response.total);

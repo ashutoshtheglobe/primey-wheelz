@@ -7,11 +7,13 @@ export const ENV_CONFIG = {
     graphql: "https://dev-api.theglobe.nz/graphql/public",
     s3Base: "https://theglobe-development.s3.amazonaws.com/",
     motorEnquiry: "https://dev-api.theglobe.nz/motorEnquiry",
+    dealerId: 251,
   },
   prod: {
     graphql: "https://api.theglobe.nz/graphql/public",
     s3Base: "https://img.theglobe.nz/",
     motorEnquiry: "https://api.theglobe.nz/motorEnquiry",
+    dealerId: 883,
   },
 };
 
@@ -20,6 +22,11 @@ export const CURRENT_ENV: "dev" | "prod" =
   (process.env.NEXT_PUBLIC_APP_ENV?.toLowerCase() as "dev" | "prod") || "prod";
 
 const activeConfig = ENV_CONFIG[CURRENT_ENV] || ENV_CONFIG.prod;
+
+export const DEFAULT_DEALER_ID: number =
+  process.env.NEXT_PUBLIC_DEALER_ID
+    ? Number(process.env.NEXT_PUBLIC_DEALER_ID)
+    : (activeConfig.dealerId || (CURRENT_ENV === "dev" ? 251 : 883));
 
 const BACKEND_PUBLIC_GRAPHQL = process.env.NEXT_PUBLIC_GRAPHQL_URL || activeConfig.graphql;
 const S3_BASE_URL = process.env.NEXT_PUBLIC_S3_BASE_URL || activeConfig.s3Base;
@@ -233,7 +240,7 @@ export function clearAllMemoryCaches(): void {
   listingDetailsMemoryCache.clear();
 }
 
-const inFlightUser883Requests = new Map<string, Promise<BackendListingsResponse>>();
+const inFlightDealerRequests = new Map<string, Promise<BackendListingsResponse>>();
 const inFlightWebsiteConfigRequests = new Map<string, Promise<WebsiteData | null>>();
 const inFlightListingDetailsRequests = new Map<string, Promise<GetListingResult | null>>();
 
@@ -242,16 +249,18 @@ const CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const LISTING_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
 /**
- * Fetches user 883 listings dynamically from backend GraphQL
+ * Fetches dealer vehicle inventory dynamically from backend GraphQL.
+ * Automatically uses dealer 883 on production and 251 on dev.
  */
-export async function fetchUser883Listings(
-  userId: number = 883,
+export async function fetchDealerListings(
+  userId: number = DEFAULT_DEALER_ID,
   page: number = 1,
   perPage: number = 12,
   keyword: string = "",
   sortBy: string = "createdAt:desc"
 ): Promise<BackendListingsResponse> {
-  const cacheKey = `${userId}_${page}_${perPage}_${keyword.trim().toLowerCase()}_${sortBy}`;
+  const effectiveUserId = Number(userId || DEFAULT_DEALER_ID);
+  const cacheKey = `${effectiveUserId}_${page}_${perPage}_${keyword.trim().toLowerCase()}_${sortBy}`;
 
   // 1. Check in-memory cache for instant 0ms return if fresh
   const cached = listingsMemoryCache.get(cacheKey);
@@ -261,9 +270,9 @@ export async function fetchUser883Listings(
   }
 
   // 2. Reuse ongoing in-flight request to prevent duplicate remote queries
-  if (inFlightUser883Requests.has(cacheKey)) {
+  if (inFlightDealerRequests.has(cacheKey)) {
     if (cached) return cached.data;
-    return inFlightUser883Requests.get(cacheKey)!;
+    return inFlightDealerRequests.get(cacheKey)!;
   }
 
   const fetchPromise = (async (): Promise<BackendListingsResponse> => {
@@ -360,7 +369,7 @@ export async function fetchUser883Listings(
     } catch (error) {
       console.warn("Error fetching live listings from backend:", error);
     } finally {
-      inFlightUser883Requests.delete(cacheKey);
+      inFlightDealerRequests.delete(cacheKey);
     }
 
     if (cached) {
@@ -375,7 +384,7 @@ export async function fetchUser883Listings(
     };
   })();
 
-  inFlightUser883Requests.set(cacheKey, fetchPromise);
+  inFlightDealerRequests.set(cacheKey, fetchPromise);
 
   // 3. Stale-While-Revalidate: Return cached data instantly (0ms response)
   // while the background fetchPromise refreshes the cache for future requests.
@@ -992,7 +1001,7 @@ export async function submitTradeInApplication(input: CreateTradeInInput): Promi
 
   // 1. Prepare REST API payload for /tradeInEnquiry endpoint (includes photoUrls, media, images, photos)
   const restPayload = {
-    dealerId: input.dealerId ? Number(input.dealerId) : 251,
+    dealerId: input.dealerId ? Number(input.dealerId) : DEFAULT_DEALER_ID,
     numberPlate: input.numberPlate || "",
     odometer: input.odometer || "",
     condition: input.condition || "Good",
@@ -1010,7 +1019,7 @@ export async function submitTradeInApplication(input: CreateTradeInInput): Promi
 
   // 2. Prepare GraphQL mutation input strictly matching CreateTradeInEnquiryInput schema
   const graphQLInput = {
-    dealerId: input.dealerId ? Number(input.dealerId) : 251,
+    dealerId: input.dealerId ? Number(input.dealerId) : DEFAULT_DEALER_ID,
     numberPlate: input.numberPlate || "",
     odometer: input.odometer || "",
     condition: input.condition || "Good",
@@ -1471,3 +1480,6 @@ export function getListingImageUrls(listing: DetailedListing): string[] {
   return images;
 }
 
+
+export const fetchUserListings = fetchDealerListings;
+export const fetchUser883Listings = fetchDealerListings;

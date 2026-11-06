@@ -5,10 +5,11 @@ import Link from "next/link";
 import {
   fetchListingById,
   getListingImageUrls,
-  fetchUser883Listings,
+  fetchDealerListings,
   sendMotorEnquiry,
 } from "@/services/backendApi";
 import { DetailedListing, Vehicle, ListingContact, GetListingResult } from "@/types";
+import { useWebsite } from "@/context/WebsiteContext";
 import { isFavourite, toggleFavourite, getFavourites } from "@/utils/favourites";
 import { determineSaleMethod } from "@/utils/saleMethod";
 
@@ -21,6 +22,7 @@ export default function ListingDetailPage({
   initialListingData?: GetListingResult | null;
   initialSimilarVehicles?: Vehicle[];
 }) {
+  const { site } = useWebsite();
   const resolvedParams = use(params);
   const listingId = resolvedParams.id;
 
@@ -73,7 +75,7 @@ export default function ListingDetailPage({
       }
 
       // Fetch fallback recommended listings if seller listings are empty
-      const recentRes = await fetchUser883Listings(883, 1, 4);
+      const recentRes = await fetchDealerListings(site?.userId || undefined, 1, 4);
       setSimilarVehicles(recentRes.listings.filter((v) => String(v.id) !== String(listingId)));
 
       setLoading(false);
