@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useWebsite } from "@/context/WebsiteContext";
 import {
   submitWebsiteFinanceApplication,
+  uploadBatchMediaFiles,
   uploadMediaFile,
   UploadedMediaItem,
 } from "@/services/backendApi";
@@ -26,6 +27,7 @@ export default function FinanceClient() {
   const [errors, setErrors] = useState<Record<string, string | boolean>>({});
   const [activeDatePicker, setActiveDatePicker] = useState<"dob" | "partnerDob" | "expiryDate" | null>(null);
   const [supportingFiles, setSupportingFiles] = useState<SupportingFile[]>([]);
+  const [uploadProgressMsg, setUploadProgressMsg] = useState<string | null>(null);
 
   const secondaryColor = site?.secondaryColor || "#FFB300";
 
@@ -408,29 +410,24 @@ export default function FinanceClient() {
     if (isSubmitting) return;
 
     setIsSubmitting(true);
+    setUploadProgressMsg(null);
 
     try {
-      const uploadedDocuments: any[] = [];
+      let uploadedDocuments: UploadedMediaItem[] = [];
+      const validFiles = supportingFiles.filter((sf) => sf.file && sf.file.size > 0);
 
-      for (let i = 0; i < supportingFiles.length; i++) {
-        const fileObj = supportingFiles[i];
-        if (fileObj.file && fileObj.file.size) {
-          const uploaded = await uploadMediaFile(
-            fileObj.file,
-            `supportingDocument_${i + 1}`,
-            "finance-details"
-          );
-          if (uploaded) {
-            uploadedDocuments.push({
-              fieldName: `supportingDocument_${i + 1}`,
-              fileName: uploaded.fileName || fileObj.name,
-              filePath: uploaded.filePath,
-              fileSize: uploaded.fileSize || fileObj.file.size,
-              mimeType: fileObj.file.type,
-            });
-          }
-        }
+      if (validFiles.length > 0) {
+        uploadedDocuments = await uploadBatchMediaFiles(
+          validFiles.map((sf, idx) => ({
+            file: sf.file,
+            fieldName: `supportingDocument_${idx + 1}`,
+          })),
+          "finance-details",
+          (msg) => setUploadProgressMsg(msg)
+        );
       }
+
+      setUploadProgressMsg("Submitting finance application...");
 
       const payload = {
         ...form,
@@ -440,6 +437,7 @@ export default function FinanceClient() {
       const result = await submitWebsiteFinanceApplication(payload, site?.slug || "primey-wheelz");
 
       setIsSubmitting(false);
+      setUploadProgressMsg(null);
 
       if (result.success) {
         setShowForm(false);
@@ -450,6 +448,7 @@ export default function FinanceClient() {
       }
     } catch (error) {
       setIsSubmitting(false);
+      setUploadProgressMsg(null);
       showToast("An error occurred during submission.", "error");
       console.error(error);
     }
@@ -1724,7 +1723,7 @@ export default function FinanceClient() {
                     className="px-10 py-4 rounded-lg text-black font-bold transition transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-xl flex items-center justify-center min-w-[160px]"
                     style={{ backgroundColor: secondaryColor }}
                   >
-                    {isSubmitting ? "SUBMITTING..." : "SUBMIT APPLICATION"}
+                    {uploadProgressMsg || (isSubmitting ? "SUBMITTING..." : "SUBMIT APPLICATION")}
                   </button>
                 )}
               </div>

@@ -736,7 +736,9 @@ export interface UploadedMediaItem {
   fileName: string;
   filePath: string;
   fileSize: number;
+  mimeType?: string;
   url?: string;
+  fullUrl?: string;
   location?: string;
   path?: string;
 }
@@ -779,13 +781,16 @@ export async function uploadMediaFile(
           .replace(/^\//, "");
 
         const fullUrl = `${S3_BASE_URL}${cleanPath}`;
+        const mimeType = file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
 
         return {
           fieldName,
           fileName: document.originalname || document.fileName || document.filename || file.name,
           filePath: cleanPath,
           fileSize: document.size || file.size,
+          mimeType,
           url: fullUrl,
+          fullUrl: fullUrl,
           location: fullUrl,
           path: cleanPath,
         };
@@ -803,46 +808,72 @@ export async function uploadMediaFile(
  * Uploads all files in parallel directly to S3 via presigned URLs for maximum speed.
  */
 export async function uploadBatchMediaFiles(
-  files: File[],
+  files: (File | { file: File; fieldName?: string })[],
   type: string = "trade-in",
   onProgressMsg?: (msg: string) => void
 ): Promise<UploadedMediaItem[]> {
   if (!files || files.length === 0) return [];
 
+  const normalizedFiles: { file: File; fieldName: string }[] = files.map((item, i) => {
+    if (item && typeof item === "object" && "file" in item) {
+      return {
+        file: item.file,
+        fieldName: item.fieldName || (type === "finance-details" ? `supportingDocument_${i + 1}` : `photo[${i}]`),
+      };
+    }
+    return {
+      file: item as File,
+      fieldName: type === "finance-details" ? `supportingDocument_${i + 1}` : `photo[${i}]`,
+    };
+  });
+
   const PRESIGNED_BATCH_ENDPOINT = MOTOR_ENQUIRY_ENDPOINT.replace(/\/motorEnquiry\/?$/, "/presigned-upload-batch");
   const PRESIGNED_COMPLETE_ENDPOINT = MOTOR_ENQUIRY_ENDPOINT.replace(/\/motorEnquiry\/?$/, "/presigned-upload-complete");
 
+  const fileLabel = type === "finance-details" ? "document" : "photo";
+
   try {
-    if (onProgressMsg) onProgressMsg(`Requesting fast upload URLs for ${files.length} photo(s)...`);
+    if (onProgressMsg) onProgressMsg(`Requesting fast upload URLs for ${normalizedFiles.length} ${fileLabel}(s)...`);
 
     // 1. Get presigned batch URLs from backend (~20ms)
     const presignRes = await fetch(PRESIGNED_BATCH_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        files: files.map((file, i) => ({
-          fieldname: `photo[${i}]`,
-          originalname: file.name,
-          mimetype: file.type || "image/jpeg",
-          size: file.size,
-        })),
+        files: normalizedFiles.map(({ file, fieldName }) => {
+          let mimetype = file.type;
+          if (!mimetype) {
+            const ext = file.name.toLowerCase();
+            if (ext.endsWith(".pdf")) mimetype = "application/pdf";
+            else if (ext.endsWith(".png")) mimetype = "image/png";
+            else if (ext.endsWith(".webp")) mimetype = "image/webp";
+            else mimetype = "image/jpeg";
+          }
+          return {
+            fieldname: fieldName,
+            originalname: file.name,
+            mimetype,
+            size: file.size,
+          };
+        }),
         type,
       }),
     });
 
     if (presignRes.ok) {
       const presignData = await presignRes.json();
-      if (presignData.success && Array.isArray(presignData.files) && presignData.files.length === files.length) {
-        if (onProgressMsg) onProgressMsg(`Uploading ${files.length} photo(s) directly to S3 in parallel...`);
+      if (presignData.success && Array.isArray(presignData.files) && presignData.files.length === normalizedFiles.length) {
+        if (onProgressMsg) onProgressMsg(`Uploading ${normalizedFiles.length} ${fileLabel}(s) directly to S3 in parallel...`);
 
         // 2. Upload all files in parallel directly to S3
         await Promise.all(
           presignData.files.map(async (item: any, idx: number) => {
-            const rawFile = files[idx];
+            const rawFile = normalizedFiles[idx].file;
+            const contentType = item.mimetype || rawFile.type || (rawFile.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
             const s3UploadRes = await fetch(item.uploadUrl, {
               method: "PUT",
               headers: {
-                "Content-Type": item.mimetype || rawFile.type || "image/jpeg",
+                "Content-Type": contentType,
               },
               body: rawFile,
             });
@@ -854,7 +885,7 @@ export async function uploadBatchMediaFiles(
         );
 
         // 3. Complete registration
-        if (onProgressMsg) onProgressMsg("Finalizing photo upload...");
+        if (onProgressMsg) onProgressMsg(`Finalizing ${fileLabel} upload...`);
         await fetch(PRESIGNED_COMPLETE_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -866,12 +897,16 @@ export async function uploadBatchMediaFiles(
           let cleanPath = typeof rawPath === "string" ? rawPath : String(rawPath);
           cleanPath = cleanPath.replace(/^https?:\/\/[^\/]+\//, "").replace(/^\//, "");
           const fullUrl = `${S3_BASE_URL}${cleanPath}`;
+          const rawFile = normalizedFiles[i].file;
+          const rawFieldName = normalizedFiles[i].fieldName;
+          const mimeType = doc.mimetype || rawFile.type || (rawFile.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
 
           return {
-            fieldName: doc.fieldname || `photo[${i}]`,
-            fileName: doc.originalname || doc.filename || files[i].name,
+            fieldName: doc.fieldname || rawFieldName,
+            fileName: doc.originalname || doc.filename || rawFile.name,
             filePath: cleanPath,
-            fileSize: doc.size || files[i].size,
+            fileSize: doc.size || rawFile.size,
+            mimeType,
             url: fullUrl,
             fullUrl: fullUrl,
             location: fullUrl,
@@ -885,10 +920,11 @@ export async function uploadBatchMediaFiles(
   }
 
   // Fallback to sequential proxy upload
-  if (onProgressMsg) onProgressMsg(`Uploading ${files.length} photo(s)...`);
+  if (onProgressMsg) onProgressMsg(`Uploading ${normalizedFiles.length} ${fileLabel}(s)...`);
   const fallbackList: UploadedMediaItem[] = [];
-  for (let i = 0; i < files.length; i++) {
-    const item = await uploadMediaFile(files[i], `photo[${i}]`, type);
+  for (let i = 0; i < normalizedFiles.length; i++) {
+    const { file, fieldName } = normalizedFiles[i];
+    const item = await uploadMediaFile(file, fieldName, type);
     if (item) fallbackList.push(item);
   }
   return fallbackList;
