@@ -843,6 +843,7 @@ export async function submitTradeInApplication(input: CreateTradeInInput): Promi
       filePath: cleanPath, // Clean relative key so backend email template <img src="${S3_BASE_URL}/${filePath}"> renders properly
       fileSize: p.fileSize || 0,
       url: photoUrl,
+      fullUrl: photoUrl,
       location: photoUrl,
       path: cleanPath,
     };
@@ -870,7 +871,7 @@ export async function submitTradeInApplication(input: CreateTradeInInput): Promi
     photoUrls: fullPhotoUrls,
     media: fullPhotoUrls,
     images: photoStringUrls,
-    photos: photoStringUrls,
+    photos: fullPhotoUrls,
     toEmails: recipientEmails,
   };
 
